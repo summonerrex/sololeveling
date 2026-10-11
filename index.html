@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rex 任務面板</title>
+<meta name="theme-color" content="#060a13">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="win login" id="login" hidden aria-label="登入">
+    <div class="win-h"><h2>系統登入</h2><span class="en">Sign in</span><span class="rule"></span></div>
+    <p class="win-sub">用 Supabase 裡建立的帳號登入。每台裝置只需要登入一次。</p>
+    <form id="loginForm" autocomplete="on">
+      <label class="fld" for="li-email">Email<input type="email" id="li-email" autocomplete="username" required></label>
+      <label class="fld" for="li-pw">密碼<input type="password" id="li-pw" autocomplete="current-password" required></label>
+      <button class="btn pri" type="submit" id="li-btn">登入</button>
+      <div class="err" id="li-err" role="alert"></div>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <section class="win status" id="status" aria-label="狀態">
+      <div class="sys"><span><b>SYSTEM</b> · 狀態視窗 <span class="mode" id="modeTag" hidden>展示模式</span></span><span id="clock" class="num"></span></div>
+      <div class="player">
+        <div class="lv"><b id="lvNum">1</b><span>LEVEL</span></div>
+        <div class="pinfo">
+          <div class="pname"><strong id="pName">PLAYER</strong><span class="rank" id="pRank">E 級</span></div>
+          <div class="bar" aria-hidden="true"><i id="xpBar" style="width:0%"></i></div>
+          <div class="xpmeta num" id="xpMeta">正在讀取資料…</div>
+        </div>
+        <div class="streak"><b id="streakNum">0</b><span>連續完成天數</span></div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div class="reset" id="resetLine"></div>
+    </section>
+
+    <nav class="tabs" role="tablist" aria-label="面板分頁">
+      <button role="tab" data-act="tab" data-v="today" id="tab-today">今日</button>
+      <button role="tab" data-act="tab" data-v="week" id="tab-week">本週</button>
+      <button role="tab" data-act="tab" data-v="month" id="tab-month">本月</button>
+      <button role="tab" data-act="tab" data-v="backlog" id="tab-backlog">任務庫</button>
+      <button role="tab" data-act="tab" data-v="rules" id="tab-rules">規則</button>
+    </nav>
+
+    <div id="banner"></div>
+    <main id="view" class="wrap" style="padding:0;max-width:none"></main>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="vendor/supabase.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

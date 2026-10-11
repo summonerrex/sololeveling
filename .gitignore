@@ -1,0 +1,5 @@
+# 個人資料（例如資料搬移 SQL、匯出的 JSON）絕對不要放進公開 repo
+private/
+*.private.sql
+rex-panel-*.json
+.DS_Store
