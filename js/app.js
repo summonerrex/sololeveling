@@ -15,6 +15,18 @@ const STEP_XP = { 25: 20, 50: 40, 90: 70 };
 const DAY_ROLLOVER_HOURS = 4;
 const STALE_DAYS = 7;
 const EXTEND_MIN = 25;
+// 每日覆盤「卡住的原因」。代碼會存進資料庫供統計：顯示文字可以改，代碼不要改。
+const BLOCKERS = [
+  ["long_list", "清單太長，不知道從哪開始"],
+  ["too_big", "事情太大，沒拆小"],
+  ["no_slot", "沒排進具體時段"],
+  ["low_energy", "精神或體力不好"],
+  ["interrupted", "被工作或臨時的事打斷"],
+  ["perfection", "想做到完美而拖延"],
+  ["forgot", "忘記回來看"],
+  ["other", "其他（寫在感想裡）"]
+];
+const BLOCKER_LABEL = Object.fromEntries(BLOCKERS);
 const REVIEW_STEPS = [
   "把這週冒出來的新事情全部加進任務庫，包括 Notion 裡還沒搬過來的待辦",
   "處理「待處理」和「停滯」的任務：拆小、排日期，或放棄",
@@ -77,7 +89,10 @@ function track(p) {
 function reportErr(err) {
   console.error(err);
   if (isAuthError(err)) { toast("需要重新登入", "登入已過期，這次的變更沒有儲存。請重新登入。", "bad"); showLogin(); return; }
-  const msg = /fetch|network/i.test(String(err && err.message)) ? "網路連線有問題，變更沒有儲存。恢復連線後重新整理再試一次。" : "變更沒有儲存成功，請重新整理後再試一次。";
+  const m = `${(err && err.code) || ""} ${(err && err.message) || ""}`;
+  const msg = /fetch|network/i.test(m) ? "網路連線有問題，變更沒有儲存。恢復連線後重新整理再試一次。"
+    : /PGRST204|column/i.test(m) ? "資料庫缺少新欄位，變更沒有儲存。請先在 Supabase 執行最新的 SQL 更新檔。"
+    : "變更沒有儲存成功，請重新整理後再試一次。";
   toast("儲存失敗", msg, "bad");
 }
 function logEvent(taskId, e) {
@@ -98,7 +113,7 @@ function setQuest(date, qid, value) {
   track(store.putQuest(date, qid, value));
 }
 function getDay(k) { return S.days[k] || { dq: {} }; }
-function getMeta(k) { return S.meta[k] || { bed: "", wake: "", energy: null, note: "" }; }
+function getMeta(k) { return Object.assign({ bed: "", wake: "", energy: null, note: "", summary: "", reflection: "", blockers: [], satisfaction: null }, S.meta[k] || {}); }
 function setMeta(k, patch) {
   const m = S.meta[k] = Object.assign({}, getMeta(k), patch);
   track(store.putMeta(k, m));
@@ -304,8 +319,71 @@ function viewToday() {
   if (stale.length) html += win("停滯警告", "Stalled", `<div class="list">${stale.map(t => taskCard(t, { mode: "stale" })).join("")}</div>`,
     { warn: true, side: String(stale.length), sub: `在本週清單 ${STALE_DAYS} 天沒有動，或已改期 3 次。拆小、排日期，或放棄。` });
 
+  html += reviewWindow(tk);
   html += win("今日行程", "Schedule", scheduleFor(tk));
   return html;
+}
+function daySystemLine(dk) {
+  const sc = dayScore(getDay(dk), C());
+  const evs = S.events.filter(e => e.logDate === dk);
+  const steps = evs.filter(isStepEvent);
+  const mins = steps.reduce((s, e) => s + (e.actualMin || 0), 0);
+  const defers = evs.filter(e => e.kind === "defer").length;
+  const drops = evs.filter(e => e.kind === "drop" || e.kind === "flag_drop").length;
+  return `每日任務 ${sc.done}/${sc.total} · 主線步驟 ${steps.length} 個${mins ? `（計時 ${mins} 分）` : ""} · 改期 ${defers} 件 · 放棄 ${drops} 件`;
+}
+const hasReview = m => !!(m.summary || m.reflection || m.satisfaction || (m.blockers || []).length);
+function reviewWindow(dk) {
+  const m = getMeta(dk), can = store.reviewReady !== false, dis = can ? "" : " disabled";
+  const chips = BLOCKERS.map(([code, label]) => `<label class="chipbox"><input type="checkbox" name="rv-blk" value="${code}"${(m.blockers || []).includes(code) ? " checked" : ""}${dis}><span>${esc(label)}</span></label>`).join("");
+  const sat = [1, 2, 3, 4, 5].map(n => `<label class="chipbox sat"><input type="radio" name="rv-sat" value="${n}"${m.satisfaction === n ? " checked" : ""}${dis}><span class="num">${n}</span></label>`).join("");
+  return win("每日覆盤", "Daily Review", `
+    ${can ? "" : `<div class="banner" style="margin-bottom:10px">資料庫還沒有覆盤用的欄位。請先在 Supabase SQL Editor 執行 2026-10-13-day-review.sql，再重新整理這個頁面。</div>`}
+    <div class="sysline num">系統紀錄：${esc(daySystemLine(dk))}</div>
+    <form id="reviewForm" class="list" autocomplete="off" data-date="${dk}">
+      <label class="fld" for="rv-summary">一句話總結今天的執行狀況<input type="text" id="rv-summary" maxlength="140" value="${esc(m.summary)}" placeholder="例如：主線做完一步，晚上被會議資料拖住，投資流程沒做"${dis}></label>
+      <div class="fld"><span>今天滿意度（1 很差 – 5 很好，選填）</span><div class="chips">${sat}</div></div>
+      <div class="fld"><span>卡住的原因（可複選，選填）</span><div class="chips">${chips}</div></div>
+      <label class="fld" for="rv-reflect">感想與觀察（選填）<textarea id="rv-reflect" rows="3" placeholder="什麼有效、什麼沒效、明天想調整什麼"${dis}>${esc(m.reflection)}</textarea></label>
+      <div class="inline"><button class="btn pri" type="submit"${dis}>${hasReview(m) ? "更新覆盤" : "儲存覆盤"}</button><span class="hint">儲存後會自動勾選每日任務的「晚間覆盤」。</span></div>
+    </form>`, { side: mdw(dk), sub: "睡前 5 分鐘寫完。凌晨 4 點前寫的都算今天。" });
+}
+function saveReview(form) {
+  const dk = form.dataset.date;
+  const summary = val("rv-summary"), reflection = val("rv-reflect");
+  const blockers = [...form.querySelectorAll('input[name="rv-blk"]:checked')].map(i => i.value);
+  const satEl = form.querySelector('input[name="rv-sat"]:checked');
+  const satisfaction = satEl ? +satEl.value : null;
+  if (!summary && !reflection && !blockers.length && !satisfaction) { toast("還差一步", "至少寫一句總結，或選一個滿意度。", "bad"); return; }
+  setMeta(dk, { summary, reflection, blockers, satisfaction });
+  const cfg = C(), q = cfg.dailies.find(x => x.id === "review");
+  if (q && !getDay(dk).dq.review) {
+    const before = dayScore(getDay(dk), cfg).coreAll;
+    setQuest(dk, "review", 1);
+    toast("覆盤已儲存", `${q.label} 完成，+${q.xp} XP`);
+    afterQuest(before);
+  } else toast("通知", "覆盤已儲存。");
+  render(true);
+}
+function weekReviewDigest(days) {
+  const rows = [], counts = {};
+  const sats = [];
+  for (const d of days) {
+    const m = getMeta(d);
+    if (!hasReview(m)) continue;
+    for (const b of (m.blockers || [])) counts[b] = (counts[b] || 0) + 1;
+    if (m.satisfaction) sats.push(m.satisfaction);
+    rows.push(`<div class="dr"><span class="dr-h num">週${DOW[dowOf(d)]} ${md(d)}${m.satisfaction ? ` · 滿意度 ${m.satisfaction}` : ""}</span>
+      <span>${esc(m.summary || "（沒寫總結）")}</span>
+      ${(m.blockers || []).length ? `<span class="hint">卡住：${m.blockers.map(b => esc(BLOCKER_LABEL[b] || b)).join("、")}</span>` : ""}
+      ${m.reflection ? `<span class="hint">${esc(m.reflection)}</span>` : ""}</div>`);
+  }
+  if (!rows.length) return `<div class="sec-label">這週的每日覆盤</div><div class="empty">這週還沒有寫過每日覆盤。</div>`;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([b, n]) => `${esc(BLOCKER_LABEL[b] || b)} ${n} 天`).join("、");
+  const avg = sats.length ? (sats.reduce((s, x) => s + x, 0) / sats.length).toFixed(1) : null;
+  return `<div class="sec-label">這週的每日覆盤（${rows.length} 天）</div>
+    <p class="hint" style="margin:0 0 8px">${avg ? `平均滿意度 ${avg}（${sats.length} 天有評分）` : "這週沒有評滿意度"}${top ? `；最常卡住：${top}` : ""}</p>
+    <div class="list">${rows.join("")}</div>`;
 }
 function scheduleFor(dk) {
   const cfg = C(), dw = dowOf(dk);
@@ -511,7 +589,7 @@ function viewWeek() {
   const stepsHtml = REVIEW_STEPS.map((s, i) => `<div class="goal${rv.steps && rv.steps[i] ? " done" : ""}">
       <button class="box" data-act="review-step" data-key="${key}" data-i="${i}" aria-pressed="${!!(rv.steps && rv.steps[i])}" aria-label="切換步驟">${rv.steps && rv.steps[i] ? "✓" : ""}</button>
       <span class="txt"><span class="num" style="color:var(--glow);margin-right:6px">${i + 1}</span>${esc(s)}</span><span></span></div>`).join("");
-  html += win("週回顧", "Weekly Review", `${stepsHtml}
+  html += win("週回顧", "Weekly Review", `${weekReviewDigest(days)}<div class="sec-label">回顧步驟</div>${stepsHtml}
     <label class="fld" for="rv-note-${key}" style="margin-top:10px">這週的觀察（什麼有效、什麼卡住）<textarea id="rv-note-${key}">${esc(rv.note || "")}</textarea></label>
     <div class="inline" style="margin-top:10px"><button class="btn sm" data-act="review-note" data-key="${key}">儲存觀察</button>
     <button class="btn ${rv.done ? "ghost" : "pri"} sm" data-act="review-done" data-key="${key}">${rv.done ? "已完成週回顧（點擊取消）" : "完成週回顧 +40 XP"}</button></div>`,
@@ -601,7 +679,7 @@ function viewRules() {
     ["超時協議", `做到預估時間還沒完成，按「超時／卡住」，四選一：延長 ${EXTEND_MIN} 分鐘（每件每天一次）、拆分、改期（一定要填日期）、放棄（寫一句原因）。不能直接放著。`],
     ["沒做完的不會消失", "排了日期卻沒完成的任務，隔天會出現在「待處理」，要選移到今天、改期、放回任務庫或放棄。"],
     ["停滯規則", `在本週清單 ${STALE_DAYS} 天沒動的任務、或已改期 3 次的任務，會出現在「停滯警告」。週回顧時一定要處理。`],
-    ["晚間覆盤", "每天睡前 5–10 分鐘：勾完成、處理沒做完的、從本週清單排明天的主線。這也是每日任務之一。"],
+    ["晚間覆盤", "每天睡前 5–10 分鐘：勾完成、把 Notion 記的待辦開進任務庫、處理沒做完的、排明天的主線，最後在「今日 › 每日覆盤」寫一句總結。儲存覆盤會自動勾選這一項每日任務。"],
     ["週回顧", "每週日 30 分鐘，照「本週 › 週回顧」的 5 個步驟走，並切到下一週把任務排進每一天。"],
     ["一天的分界", `凌晨 ${DAY_ROLLOVER_HOURS} 點前做的事算前一天，所以半夜覆盤不會被算到隔天。`],
     ["作息調整", sp || "依設定逐步調整就寢與起床時間。"]
@@ -798,6 +876,7 @@ document.addEventListener("change", e => {
 document.addEventListener("submit", async e => {
   e.preventDefault();
   if (e.target.id === "loginForm") return doLogin();
+  if (e.target.id === "reviewForm") return saveReview(e.target);
   if (e.target.id !== "addForm") return;
   const title = val("na-title");
   if (!title) { toast("還差一步", "請先填任務名稱。", "bad"); return; }

@@ -30,7 +30,7 @@ export function isAuthError(err) {
 
 /* ---------------- 展示模式：只在記憶體裡，不儲存 ---------------- */
 class DemoStore {
-  constructor() { this.mode = "demo"; }
+  constructor() { this.mode = "demo"; this.reviewReady = true; }
   async session() { return { user: { id: "demo" } }; }
   async signIn() { return this.session(); }
   async signOut() {}
@@ -76,7 +76,12 @@ class SupabaseStore {
 
   async loadAll() {
     const names = ["settings", "tasks", "task_events", "daily_quests", "day_meta", "goals", "counters", "reviews", "quarters"];
-    const [settings, tasks, events, dq, meta, goals, counters, reviews, quarters] = await Promise.all(names.map(n => this.all(n)));
+    const [settings, tasks, events, dq, meta, goals, counters, reviews, quarters, probe] = await Promise.all([
+      ...names.map(n => this.all(n)),
+      // 確認「每日覆盤」欄位是否已建立（supabase/migrations/2026-10-13-day-review.sql）
+      this.sb.from("day_meta").select("summary,reflection,blockers,satisfaction").limit(1)
+    ]);
+    this.reviewReady = !probe.error;
     const S = { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {} };
     if (settings[0]) S.config = settings[0].config;
     for (const r of tasks) S.tasks[r.id] = {
@@ -90,7 +95,10 @@ class SupabaseStore {
       actualMin: r.actual_min, toDate: r.to_date, detail: r.detail
     })).sort((a, b) => (a.at < b.at ? -1 : 1));
     for (const r of dq) { (S.days[r.log_date] = S.days[r.log_date] || { dq: {} }).dq[r.quest_id] = r.value; }
-    for (const r of meta) S.meta[r.log_date] = { bed: hhmm(r.bed_time), wake: hhmm(r.wake_time), energy: r.energy, note: r.note || "" };
+    for (const r of meta) S.meta[r.log_date] = {
+      bed: hhmm(r.bed_time), wake: hhmm(r.wake_time), energy: r.energy, note: r.note || "",
+      summary: r.summary || "", reflection: r.reflection || "", blockers: r.blockers || [], satisfaction: r.satisfaction ?? null
+    };
     for (const r of goals) S.goals[r.id] = { scope: r.scope, periodKey: r.period_key, area: r.area, text: r.text, done: r.done, suggested: r.suggested, doneAt: r.done_at, createdAt: r.created_at };
     for (const r of counters) S.counters[`${r.scope}|${r.period_key}|${r.target_id}`] = r.value;
     for (const r of reviews) S.reviews[r.week_key] = { steps: r.steps || [], done: r.done, note: r.note || "", doneAt: r.done_at };
@@ -122,6 +130,7 @@ class SupabaseStore {
   }
   putMeta(date, m) {
     const row = { user_id: this.uid, log_date: date, bed_time: m.bed || null, wake_time: m.wake || null, energy: m.energy || null, note: m.note || null };
+    if (this.reviewReady) Object.assign(row, { summary: m.summary || null, reflection: m.reflection || null, blockers: m.blockers || [], satisfaction: m.satisfaction || null });
     return serial(`meta:${date}`, async () => check(await this.sb.from("day_meta").upsert(row, { onConflict: "user_id,log_date" })));
   }
   putGoal(id, g) {

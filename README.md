@@ -36,6 +36,16 @@ Rex 的每日、每週、每月任務面板：每日任務、主線任務上限�
 
 `log_date` 是邏輯日期：凌晨 4 點前發生的事算前一天。`day_meta.bed_time` 是「這天早上之前那一晚」的上床時間。
 
+`day_meta` 的每日覆盤欄位：`summary` 一句話總結、`reflection` 感想、`blockers` 卡住的原因代碼（`long_list` 清單太長、`too_big` 事情太大沒拆、`no_slot` 沒排時段、`low_energy` 精神體力不好、`interrupted` 被打斷、`perfection` 想做到完美而拖延、`forgot` 忘記回來看、`other` 其他）、`satisfaction` 滿意度 1–5。
+
+## 資料庫更新紀錄
+
+新增欄位時會在 `supabase/migrations/` 放一份 SQL，在 Supabase SQL Editor 執行一次即可。`schema.sql` 也會同步更新，新建專案只要跑 `schema.sql`。
+
+| 日期 | 檔案 | 內容 |
+| --- | --- | --- |
+| 2026-10-13 | `migrations/2026-10-13-day-review.sql` | 每日覆盤欄位 |
+
 ## 分析範例（在 Supabase SQL Editor 執行）
 
 預估時間準不準：
@@ -78,4 +88,34 @@ from task_events e
 join tasks t on t.user_id = e.user_id and t.id = e.task_id
 where e.kind = 'defer'
 group by t.title order by 改期次數 desc limit 10;
+```
+
+最常卡住的原因：
+
+```sql
+select b as 原因代碼, count(*) as 天數
+from day_meta, unnest(blockers) as b
+group by b order by 天數 desc;
+```
+
+滿意度和當天完成的步驟數：
+
+```sql
+with s as (
+  select user_id, log_date, count(*) filter (where kind in ('step', 'split')) as steps
+  from task_events group by 1, 2
+)
+select m.satisfaction as 滿意度, count(*) as 天數, round(avg(coalesce(s.steps, 0)), 1) as 平均完成步驟
+from day_meta m left join s using (user_id, log_date)
+where m.satisfaction is not null
+group by 1 order by 1;
+```
+
+匯出每日覆盤文字（做質化分析或交給 AI 歸納）：
+
+```sql
+select log_date, satisfaction, blockers, summary, reflection
+from day_meta
+where summary is not null or reflection is not null
+order by log_date;
 ```

@@ -97,6 +97,11 @@ create table if not exists public.day_meta (
   updated_at timestamptz not null default now(),
   primary key (user_id, log_date)
 );
+-- 2026-10-13 新增：每日覆盤（說明見 supabase/migrations/2026-10-13-day-review.sql）
+alter table public.day_meta add column if not exists summary text;
+alter table public.day_meta add column if not exists reflection text;
+alter table public.day_meta add column if not exists blockers text[] not null default '{}';
+alter table public.day_meta add column if not exists satisfaction smallint check (satisfaction between 1 and 5);
 
 -- ---------- 週目標、月目標 ----------
 create table if not exists public.goals (
