@@ -1,4 +1,4 @@
-// Rex 任務面板：畫面與操作邏輯。資料讀寫都交給 store.js。
+// Solo Leveling（Rex 的任務面板）：畫面與操作邏輯。資料讀寫都交給 store.js。
 import { createStore, isAuthError } from "./store.js";
 import { DEFAULT_CONFIG } from "./demo-data.js";
 
@@ -16,7 +16,7 @@ const DAY_ROLLOVER_HOURS = 4;
 const STALE_DAYS = 7;
 const EXTEND_MIN = 25;
 const REVIEW_STEPS = [
-  "把這週冒出來的新事情全部加進任務庫（不在別處記）",
+  "把這週冒出來的新事情全部加進任務庫，包括 Notion 裡還沒搬過來的待辦",
   "處理「待處理」和「停滯」的任務：拆小、排日期，或放棄",
   "每個領域選本週目標：主攻領域各 1–2 個，維持領域各最多 1 個",
   "把本週清單排進每一天，不超過每日上限",
@@ -594,7 +594,7 @@ function viewRules() {
   const capLine = [1, 2, 3, 4, 5, 6, 0].map(d => `週${DOW[d]} ${caps[String(d)] ?? 2} 件`).join("、");
   const sp = (cfg.sleepPlan || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1)).map(p => `${md(p.from)} 起：${p.bed} 前上床、${p.wake} 前起床`).join("；");
   const rules = [
-    ["單一入口", "所有待辦只記在這個面板的任務庫。Notion 和筆記本只放筆記與資料，不放待辦。"],
+    ["單一入口", "所有待辦以 Solo Leveling 的任務庫為準。通勤時可以先記在 Notion，但當天晚間覆盤要把待辦開進任務庫，並在 Notion 標記已搬移。Notion 只留想法和筆記。"],
     ["每件任務都有下一步", "主線任務一定要寫「下一步」和預估時間（25、50 或 90 分鐘）。超過 90 分鐘的事，先拆成第一個小步驟。"],
     ["每日主線上限", `${capLine}。每日任務不算在上限內。超過上限時面板會用紅字提醒。`],
     ["先計時再動手", "按「開始計時」再開始做。到了預估時間，卡片會變紅，提醒你用超時協議處理。計時紀錄會留著，之後可以分析預估準不準。"],
@@ -755,7 +755,7 @@ const ACT = {
   export() {
     const blob = new Blob([JSON.stringify({ exportedAt: nowIso(), ...S }, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = `rex-panel-${todayKey()}.json`;
+    a.href = URL.createObjectURL(blob); a.download = `solo-leveling-${todayKey()}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   },

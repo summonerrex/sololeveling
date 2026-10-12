@@ -2,4 +2,5 @@
 private/
 *.private.sql
 rex-panel-*.json
+solo-leveling-*.json
 .DS_Store
