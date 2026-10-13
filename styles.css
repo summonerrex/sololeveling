@@ -278,3 +278,7 @@ input[type=time]{width:auto}
 .dr{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--edge-soft);background:var(--inset);border-radius:2px;min-width:0;overflow-wrap:anywhere}
 .dr-h{font-size:12px;color:var(--glow)}
 div.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+
+.win{scroll-margin-top:72px}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}

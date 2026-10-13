@@ -1,7 +1,7 @@
 // 資料存取層：網站畫面只透過這個檔案讀寫資料。
 // 要換資料庫（例如改用別的服務），只需要改這個檔案。
-import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
-import { demoState } from "./demo-data.js";
+import { SUPABASE_URL, SUPABASE_KEY } from "./config.js?v=2026-10-14.1";
+import { demoState } from "./demo-data.js?v=2026-10-14.1";
 
 // 同一筆資料的寫入依序執行，避免後送出的寫入先到。
 const chains = new Map();

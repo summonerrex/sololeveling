@@ -1,6 +1,7 @@
 // Solo Leveling（Rex 的任務面板）：畫面與操作邏輯。資料讀寫都交給 store.js。
-import { createStore, isAuthError } from "./store.js";
-import { DEFAULT_CONFIG } from "./demo-data.js";
+import { createStore, isAuthError } from "./store.js?v=2026-10-14.1";
+import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-10-14.1";
+import { VERSION } from "./version.js?v=2026-10-14.1";
 
 /* ================= constants ================= */
 const AREAS = {
@@ -229,6 +230,11 @@ function render(force) {
 }
 function renderBanner() {
   const b = $("#banner");
+  const upd = UI.newVersion ? `<div class="banner" style="margin-bottom:8px">網站有新版本。<button class="btn sm" data-act="update" style="margin-left:6px">重新載入</button></div>` : "";
+  renderBannerBody(b);
+  if (upd) b.innerHTML = upd + b.innerHTML;
+}
+function renderBannerBody(b) {
   if (loadError) b.innerHTML = `<div class="banner">資料讀取失敗：${esc(loadError)}。確認網路連線後重新整理頁面。</div>`;
   else if (!loaded) b.innerHTML = `<div class="banner">正在讀取資料…</div>`;
   else if (store.mode === "demo") b.innerHTML = `<div class="banner">展示模式：畫面上是範例資料，所有變更都不會儲存。在 js/config.js 填入 Supabase 設定後，就會改用你自己的資料。</div>`;
@@ -265,7 +271,7 @@ function renderHeader() {
   }
 }
 function win(title, en, body, opts = {}) {
-  return `<section class="win${opts.warn ? " warn" : ""}">
+  return `<section class="win${opts.warn ? " warn" : ""}"${opts.id ? ` id="${opts.id}"` : ""}>
     <div class="win-h"><h2>${title}</h2><span class="en">${en}</span><span class="rule"></span>${opts.side ? `<span class="side">${opts.side}</span>` : ""}</div>
     ${opts.sub ? `<p class="win-sub">${opts.sub}</p>` : ""}${body}</section>`;
 }
@@ -297,7 +303,10 @@ function viewToday() {
       <label class="fld" for="m-wake">今早起床時間<input type="time" id="m-wake" value="${esc(meta.wake)}" data-change="meta" data-f="wake"></label>
       <div class="fld"><span>今天精神（1 很差 – 5 很好）</span><div class="energy" role="group" aria-label="今天精神">${[1, 2, 3, 4, 5].map(n => `<button data-act="energy" data-v="${n}" aria-pressed="${meta.energy === n}">${n}</button>`).join("")}</div></div>
     </div><p class="hint" style="margin:6px 0 0">時間和精神分數是選填，會留著做之後的分析，例如睡眠和完成率的關係。填了時間會自動勾作息兩項。</p>`;
-  let html = win("每日任務", "Daily Quest", `<div class="list">${rows}</div>${clear}${metaRow}`, { side: `${sc.done} / ${sc.total}` });
+  const hr = new Date().getHours(), evening = hr >= 20 || hr < DAY_ROLLOVER_HOURS;
+  const jump = `<div class="inline" style="margin-top:10px"><a class="btn sm" href="#review-win">${hasReview(getMeta(tk)) ? "查看今天的每日覆盤" : "寫今天的每日覆盤"}</a><span class="hint">${evening ? "就在下方" : "在頁面下方"}</span></div>`;
+  let html = win("每日任務", "Daily Quest", `<div class="list">${rows}</div>${clear}${metaRow}${jump}`, { side: `${sc.done} / ${sc.total}` });
+  if (evening) html += reviewWindow(tk);
 
   const carry = tasksList().filter(t => isOpen(t) && t.plannedDate && t.plannedDate < tk);
   if (carry.length) html += win("待處理", "Unresolved", `<div class="list">${carry.map(t => taskCard(t, { mode: "carry" })).join("")}</div>`,
@@ -319,7 +328,7 @@ function viewToday() {
   if (stale.length) html += win("停滯警告", "Stalled", `<div class="list">${stale.map(t => taskCard(t, { mode: "stale" })).join("")}</div>`,
     { warn: true, side: String(stale.length), sub: `在本週清單 ${STALE_DAYS} 天沒有動，或已改期 3 次。拆小、排日期，或放棄。` });
 
-  html += reviewWindow(tk);
+  if (!evening) html += reviewWindow(tk);
   html += win("今日行程", "Schedule", scheduleFor(tk));
   return html;
 }
@@ -346,7 +355,7 @@ function reviewWindow(dk) {
       <div class="fld"><span>卡住的原因（可複選，選填）</span><div class="chips">${chips}</div></div>
       <label class="fld" for="rv-reflect">感想與觀察（選填）<textarea id="rv-reflect" rows="3" placeholder="什麼有效、什麼沒效、明天想調整什麼"${dis}>${esc(m.reflection)}</textarea></label>
       <div class="inline"><button class="btn pri" type="submit"${dis}>${hasReview(m) ? "更新覆盤" : "儲存覆盤"}</button><span class="hint">儲存後會自動勾選每日任務的「晚間覆盤」。</span></div>
-    </form>`, { side: mdw(dk), sub: "睡前 5 分鐘寫完。凌晨 4 點前寫的都算今天。" });
+    </form>`, { id: "review-win", side: mdw(dk), sub: "睡前 5 分鐘寫完。凌晨 4 點前寫的都算今天。晚上 8 點後這區會移到每日任務正下方。" });
 }
 function saveReview(form) {
   const dk = form.dataset.date;
@@ -694,7 +703,7 @@ function viewRules() {
     <p class="hint" style="margin-top:10px">升級門檻：Lv.N 升到 Lv.N+1 需要的累積經驗值是 50 × N × (N+1)。領域數值＝該領域累積經驗值 ÷ 10。評級：Lv.1–4 E 級、5–9 D 級、10–19 C 級、20–34 B 級、35–49 A 級、50 以上 S 級。</p>`);
   const sync = lastLoad ? new Date(lastLoad) : null;
   html += win("資料", "Data", `<div class="foot">
-      <span>${store.mode === "demo" ? "展示模式（不儲存）" : `已連線 Supabase${sync ? ` · 上次同步 ${pad(sync.getHours())}:${pad(sync.getMinutes())}` : ""}`}</span>
+      <span>版本 ${VERSION} · ${store.mode === "demo" ? "展示模式（不儲存）" : `已連線 Supabase${sync ? ` · 上次同步 ${pad(sync.getHours())}:${pad(sync.getMinutes())}` : ""}`}</span>
       <span class="row-actions"><button class="btn sm" data-act="reload">重新同步</button><button class="btn sm" data-act="export">匯出全部資料（JSON）</button>${store.mode === "demo" ? "" : `<button class="btn ghost sm" data-act="signout">登出</button>`}</span>
     </div><p class="hint" style="margin-top:8px">每日任務、上限、固定行程這些設定存在 Supabase 的 settings 表（config 欄位）。</p>`);
   return html;
@@ -830,6 +839,7 @@ const ACT = {
   "f-area"(el) { UI.fArea = el.dataset.v; },
   "f-status"(el) { UI.fStatus = el.dataset.v; },
   reload() { load(true); },
+  update() { location.reload(); },
   export() {
     const blob = new Blob([JSON.stringify({ exportedAt: nowIso(), ...S }, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
@@ -917,7 +927,20 @@ async function load(force) {
   }
   render(true);
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !$("#app").hidden) load(false); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  checkVersion();
+  if (!$("#app").hidden) load(false);
+});
+// 手機主畫面開著的頁面切回來時不會重新載入，所以主動比對 version.json，有新版就提示重新載入
+async function checkVersion() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    if (version && version !== VERSION && UI.newVersion !== version) { UI.newVersion = version; renderBanner(); }
+  } catch (e) {}
+}
 
 function tick() {
   const now = new Date();
@@ -934,6 +957,7 @@ setInterval(tick, 30000);
 
 (async function boot() {
   tick();
+  checkVersion();
   if (store.mode === "demo") { showApp(); await load(true); return; }
   let s = null;
   try { s = await store.session(); } catch (e) { s = null; }
