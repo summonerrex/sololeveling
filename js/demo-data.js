@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = {
     { id: "pushup", label: "伏地挺身", detail: "30 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
     { id: "crunch", label: "捲腹", detail: "20 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
     { id: "squat", label: "深蹲", detail: "20 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
+    { id: "abwheel", label: "滾輪", detail: "1–2 組", type: "sets", sets: 2, min: 1, xp: 10, area: "body", core: true },
     { id: "review", label: "晚間覆盤", detail: "勾完成、處理沒做完的、排明天（5–10 分鐘）", type: "check", xp: 15, area: "life", core: true }
   ],
   caps: { "0": 1, "1": 1, "2": 1, "3": 2, "4": 2, "5": 2, "6": 2 },

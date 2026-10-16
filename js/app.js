@@ -1,7 +1,7 @@
 // Solo Leveling（Rex 的任務面板）：畫面與操作邏輯。資料讀寫都交給 store.js。
-import { createStore, isAuthError } from "./store.js?v=2026-10-14.1";
-import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-10-14.1";
-import { VERSION } from "./version.js?v=2026-10-14.1";
+import { createStore, isAuthError } from "./store.js?v=2026-10-16.1";
+import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-10-16.1";
+import { VERSION } from "./version.js?v=2026-10-16.1";
 
 /* ================= constants ================= */
 const AREAS = {
@@ -241,38 +241,95 @@ function renderBannerBody(b) {
   else if (!S.config && !Object.keys(S.tasks).length) b.innerHTML = `<div class="banner">已登入，但資料庫還是空的。到 Supabase 執行資料搬移 SQL，或在「任務庫」新增第一件事。</div>`;
   else b.innerHTML = "";
 }
+const RING_TICKS = 40;
+let ringLit = -1;
+function ringMarkup(lit) {
+  let out = "";
+  for (let i = 0; i < RING_TICKS; i++) {
+    const a = (i / RING_TICKS) * Math.PI * 2 - Math.PI / 2, major = i % 5 === 0;
+    const r1 = major ? 47 : 49, r2 = 56;
+    const x1 = (60 + r1 * Math.cos(a)).toFixed(2), y1 = (60 + r1 * Math.sin(a)).toFixed(2);
+    const x2 = (60 + r2 * Math.cos(a)).toFixed(2), y2 = (60 + r2 * Math.sin(a)).toFixed(2);
+    out += `<line class="tk${i < lit ? " on" : i === lit ? " next" : ""}" style="--i:${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  }
+  return out + `<circle class="ring-in" cx="60" cy="60" r="42"/>`;
+}
 function renderHeader() {
   const cfg = C(), tk = todayKey();
   const { xp, by } = totals();
   const lv = levelOf(xp);
+  const pct = Math.max(0, Math.min(100, (xp - lv.base) / (lv.next - lv.base) * 100));
+  const lit = loaded ? Math.floor(pct / 100 * RING_TICKS) : 0;
+  if (lit !== ringLit) { $("#ringSvg").innerHTML = ringMarkup(lit); ringLit = lit; }
+  $("#ringBox").setAttribute("aria-label", `等級 ${lv.L}，升級進度 ${Math.round(pct)}%`);
   $("#lvNum").textContent = lv.L;
   $("#pName").textContent = cfg.playerName || "PLAYER";
   $("#pRank").textContent = `${rankOf(lv.L)} 級`;
-  const pct = Math.max(0, Math.min(100, (xp - lv.base) / (lv.next - lv.base) * 100));
-  $("#xpBar").style.width = pct.toFixed(1) + "%";
-  $("#xpMeta").textContent = loaded ? `XP ${xp.toLocaleString()} ／ 下一級 ${lv.next.toLocaleString()}（還差 ${(lv.next - xp).toLocaleString()}）` : "正在讀取資料…";
-  $("#streakNum").textContent = streak();
-  $("#stats").innerHTML = AREA_ORDER.map(a => {
+  $("#xpBar").style.width = (loaded ? pct : 0).toFixed(1) + "%";
+  $("#xpMeta").innerHTML = loaded ? `<b>${xp.toLocaleString()}</b> XP，再 ${(lv.next - xp).toLocaleString()} 升到 Lv.${lv.L + 1}` : "正在讀取資料…";
+  const st = streak();
+  const sEl = $("#streak");
+  sEl.className = "streak" + (st > 0 ? " hot" : "");
+  sEl.innerHTML = st > 0 ? `<b>${st}</b>天連續完成核心任務` : `<b>0</b>今天完成核心任務就開始累積連續天數`;
+  const vals = AREA_ORDER.map(a => Math.floor(by[a] / 10)), max = Math.max(1, ...vals);
+  $("#stats").innerHTML = AREA_ORDER.map((a, k) => {
     const focus = (cfg.focus || []).includes(a);
-    return `<div class="stat" style="${areaStyle(a)}"><div class="k"><span>${AREAS[a].name}${focus ? " · 主攻" : ""}</span><em>${AREAS[a].code}</em></div><div class="v num">${Math.floor(by[a] / 10)}</div></div>`;
+    return `<div class="stat" style="${areaStyle(a)}"><span class="st-k">${AREAS[a].name}${focus ? "<em>主攻</em>" : ""}</span><span class="st-code">${AREAS[a].code}</span><span class="st-v num">${vals[k]}</span><span class="st-bar"><i style="width:${(vals[k] / max * 100).toFixed(0)}%"></i></span></div>`;
   }).join("");
-  let reset = `<span>今天 ${mdw(tk)}</span>`;
+  let reset = `<span class="date">${md(tk)} 週${DOW[dowOf(tk)]}</span>`;
   if (cfg.startDate) {
     const n = diffDays(tk, cfg.startDate) + 1, total = cfg.resetDays || 14;
-    if (n >= 1 && n <= total) reset += `<span class="chip">重整計畫 第 ${n} 天 ／ ${total} 天</span>`;
-    else if (n > total) reset += `<span class="chip ok">重整期已完成，持續運作中</span>`;
+    if (n >= 1 && n <= total) reset += `<span class="chip">重整第 ${n}／${total} 天</span>`;
+    else if (n > total) reset += `<span class="chip ok">重整期完成</span>`;
   }
   const note = (cfg.dayNotes || {})[String(dowOf(tk))];
   if (note) reset += `<span class="chip">${esc(note)}</span>`;
+  const sc = dayScore(getDay(tk), cfg);
+  if (loaded && sc.coreAll) reset += `<span class="chip ok">核心任務完成</span>`;
   $("#resetLine").innerHTML = reset;
+  const ws0 = weekStart(tk);
+  let wcells = "", wdone = 0, wpast = 0;
+  for (let k = 0; k < 7; k++) {
+    const dk = addDays(ws0, k), d = S.days[dk], s2 = d ? dayScore(d, cfg) : null;
+    const lvl = !s2 ? 0 : s2.done === s2.total ? 3 : s2.coreAll ? 2 : s2.done > 0 ? 1 : 0;
+    if (dk <= tk) { wpast++; if (s2 && s2.coreAll) wdone++; }
+    wcells += `<span class="wc l${lvl}${dk === tk ? " td" : ""}${dk > tk ? " fut" : ""}"><i></i><small>${DOW[dowOf(dk)]}</small></span>`;
+  }
+  $("#railWeek").innerHTML = `<div class="rw-h"><span>本週核心任務</span><b class="num">${wdone}／${wpast} 天</b></div><div class="rw-cells">${wcells}</div>`;
+  document.documentElement.style.setProperty("--charge", loaded ? (sc.done / Math.max(1, sc.total)).toFixed(2) : "0");
+  $("#status").classList.toggle("core-clear", loaded && sc.coreAll);
   if (loaded) {
-    if (lastLevel != null && lv.L > lastLevel) toast("等級提升", `Lv.${lastLevel} → Lv.${lv.L}　目前評級：${rankOf(lv.L)} 級`, "lvl");
+    if (lastLevel != null && lv.L > lastLevel) levelUp(lastLevel, lv.L);
     lastLevel = lv.L;
   }
 }
+function levelUp(from, to) { notice("lvl", "等級提升", `Lv.${to}`, `評級 ${rankOf(to)} 級`); }
+// 系統通知：全畫面置中、約 2.8 秒自動消失，點一下也會關閉。減少動態效果時改用一般通知。
+function notice(kind, title, big, line) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { toast(title, `${big}，${line}`, kind === "lvl" ? "lvl" : ""); return; }
+  const el = document.createElement("div");
+  el.className = `levelup ${kind}`; el.setAttribute("role", "status");
+  el.innerHTML = `<div class="lu"><small>${esc(title)}</small><b>${esc(big)}</b><span>${esc(line)}</span></div>`;
+  el.addEventListener("click", () => el.remove());
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2900);
+}
+function fx(text, rect) {
+  if (!rect || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const s = document.createElement("span");
+  s.className = "xpfloat"; s.textContent = text;
+  s.style.left = Math.max(8, Math.min(innerWidth - 70, rect.right - 64)) + "px";
+  s.style.top = (rect.top + rect.height / 2 - 14) + "px";
+  document.body.appendChild(s);
+  setTimeout(() => s.remove(), 1000);
+}
+function pageHead(title, summary) {
+  return `<header class="pagehead"><h1>${title}</h1>${summary ? `<p>${summary}</p>` : ""}</header>`;
+}
+const nb = n => `<b class="nb">${n}</b>`;
 function win(title, en, body, opts = {}) {
-  return `<section class="win${opts.warn ? " warn" : ""}"${opts.id ? ` id="${opts.id}"` : ""}>
-    <div class="win-h"><h2>${title}</h2><span class="en">${en}</span><span class="rule"></span>${opts.side ? `<span class="side">${opts.side}</span>` : ""}</div>
+  return `<section class="win${opts.warn ? " warn" : ""}${opts.cls ? " " + opts.cls : ""}"${opts.id ? ` id="${opts.id}"` : ""} aria-label="${title}">
+    <div class="win-h"><h2>${title}</h2>${opts.side ? `<span class="side">${opts.side}</span>` : ""}</div>
     ${opts.sub ? `<p class="win-sub">${opts.sub}</p>` : ""}${body}</section>`;
 }
 
@@ -289,14 +346,14 @@ function viewToday() {
     if (q.type === "sets") {
       const n = +v || 0, ok = n >= (q.min || 1);
       const pips = Array.from({ length: q.sets || 3 }, (_, i) => `<button class="pip${i < n ? " on" : ""}" data-act="dq-set" data-id="${esc(q.id)}" data-n="${i + 1}" aria-label="${esc(q.label)} 第 ${i + 1} 組">${i + 1}</button>`).join("");
-      return `<div class="dq${ok ? " done" : ""}"><span class="box">${ok ? "✓" : ""}</span><span class="lbl"><b>${esc(q.label)}</b><small>${esc(detail)}　完成 ${n} 組</small></span><span class="pips">${pips}</span></div>`;
+      return `<div class="dq${ok ? " done" : ""}"><span class="dq-mark" aria-hidden="true"></span><span class="dq-name"><b>${esc(q.label)}</b><small>${esc(detail)}</small></span><span class="pips" role="group" aria-label="${esc(q.label)}，已完成 ${n} 組">${pips}</span></div>`;
     }
-    return `<button class="dq${v ? " done" : ""}" data-act="dq-toggle" data-id="${esc(q.id)}" aria-pressed="${!!v}"><span class="box">${v ? "✓" : ""}</span><span class="lbl"><b>${esc(q.label)}</b>${detail ? `<small>${esc(detail)}</small>` : ""}</span><span class="xp">+${q.xp}</span></button>`;
+    return `<button class="dq${v ? " done" : ""}" data-act="dq-toggle" data-id="${esc(q.id)}" aria-pressed="${!!v}"><span class="dq-mark" aria-hidden="true"></span><span class="dq-name"><b>${esc(q.label)}</b>${detail ? `<small>${esc(detail)}</small>` : ""}</span><span class="dq-xp num">+${q.xp}</span></button>`;
   }).join("");
   const coreNames = cfg.dailies.filter(q => q.core).map(q => q.label).join("、");
   const clear = sc.coreAll
-    ? `<div class="clear${UI.justCleared ? " fresh" : ""}">【完成】今日核心每日任務已達成，額外 +20 XP。連續天數 +1。</div>`
-    : `<div class="clear pending">核心項目：${esc(coreNames)}。全部完成才算進連續天數。</div>`;
+    ? `<div class="clear${UI.justCleared ? " fresh" : ""}">今天的核心任務全部完成，額外 +20 XP，連續天數 +1。</div>`
+    : `<div class="clear pending">核心任務：${esc(coreNames)}。全部完成才算進連續天數。</div>`;
   UI.justCleared = false;
   const metaRow = `<div class="meta-row">
       <label class="fld" for="m-bed">昨晚上床時間<input type="time" id="m-bed" value="${esc(meta.bed)}" data-change="meta" data-f="bed"></label>
@@ -305,7 +362,10 @@ function viewToday() {
     </div><p class="hint" style="margin:6px 0 0">時間和精神分數是選填，會留著做之後的分析，例如睡眠和完成率的關係。填了時間會自動勾作息兩項。</p>`;
   const hr = new Date().getHours(), evening = hr >= 20 || hr < DAY_ROLLOVER_HOURS;
   const jump = `<div class="inline" style="margin-top:10px"><a class="btn sm" href="#review-win">${hasReview(getMeta(tk)) ? "查看今天的每日覆盤" : "寫今天的每日覆盤"}</a><span class="hint">${evening ? "就在下方" : "在頁面下方"}</span></div>`;
-  let html = win("每日任務", "Daily Quest", `<div class="list">${rows}</div>${clear}${metaRow}${jump}`, { side: `${sc.done} / ${sc.total}` });
+  const left = sc.total - sc.done, todayOpen = plannedOn(tk).length, carryN = tasksList().filter(t => isOpen(t) && t.plannedDate && t.plannedDate < tk).length;
+  const todaySum = (left ? `還有 ${nb(left)} 項每日任務` : "每日任務全部完成") + (todayOpen ? `，主線 ${nb(todayOpen)} 件` : "，今天沒有排主線") + (carryN ? `，另有 ${nb(carryN)} 件待處理` : "") + "。";
+  const chargeBar = `<div class="charge" aria-hidden="true"><i style="width:${(sc.done / Math.max(1, sc.total) * 100).toFixed(0)}%"></i></div>`;
+  let html = pageHead("今日", todaySum) + win("每日任務", "Daily Quest", `${chargeBar}<div class="list">${rows}</div>${clear}${metaRow}${jump}`, { side: `${sc.done} / ${sc.total}`, cls: "quest" });
   if (evening) html += reviewWindow(tk);
 
   const carry = tasksList().filter(t => isOpen(t) && t.plannedDate && t.plannedDate < tk);
@@ -339,7 +399,7 @@ function daySystemLine(dk) {
   const mins = steps.reduce((s, e) => s + (e.actualMin || 0), 0);
   const defers = evs.filter(e => e.kind === "defer").length;
   const drops = evs.filter(e => e.kind === "drop" || e.kind === "flag_drop").length;
-  return `每日任務 ${sc.done}/${sc.total} · 主線步驟 ${steps.length} 個${mins ? `（計時 ${mins} 分）` : ""} · 改期 ${defers} 件 · 放棄 ${drops} 件`;
+  return `每日任務 ${sc.done}/${sc.total}，主線完成 ${steps.length} 步${mins ? `（計時 ${mins} 分）` : ""}，改期 ${defers} 件，放棄 ${drops} 件`;
 }
 const hasReview = m => !!(m.summary || m.reflection || m.satisfaction || (m.blockers || []).length);
 function reviewWindow(dk) {
@@ -382,7 +442,7 @@ function weekReviewDigest(days) {
     if (!hasReview(m)) continue;
     for (const b of (m.blockers || [])) counts[b] = (counts[b] || 0) + 1;
     if (m.satisfaction) sats.push(m.satisfaction);
-    rows.push(`<div class="dr"><span class="dr-h num">週${DOW[dowOf(d)]} ${md(d)}${m.satisfaction ? ` · 滿意度 ${m.satisfaction}` : ""}</span>
+    rows.push(`<div class="dr"><span class="dr-h num">週${DOW[dowOf(d)]} ${md(d)}${m.satisfaction ? `<span class="dr-sat">滿意度 ${m.satisfaction}</span>` : ""}</span>
       <span>${esc(m.summary || "（沒寫總結）")}</span>
       ${(m.blockers || []).length ? `<span class="hint">卡住：${m.blockers.map(b => esc(BLOCKER_LABEL[b] || b)).join("、")}</span>` : ""}
       ${m.reflection ? `<span class="hint">${esc(m.reflection)}</span>` : ""}</div>`);
@@ -414,25 +474,26 @@ function taskCard(t, o = {}) {
   const mode = o.mode || "list";
   const open = UI.panel && UI.panel.id === t.id ? UI.panel.kind : null;
   const est = t.estMin || 25;
-  const meta = [areaChip(t.area)];
+  const meta = [areaChip(t.area)], facts = [];
   let cls = "";
-  if (isOpen(t)) meta.push(`<span class="chip num">${est} 分 · +${STEP_XP[est] || 20} XP</span>`);
+  if (isOpen(t)) facts.push(`${est} 分鐘`, `<span class="xpt">+${STEP_XP[est] || 20} XP</span>`);
   if (t.startedAt) {
     const el = Math.floor(elapsedMin(t)), lim = limitMin(t);
-    meta.push(`<span class="chip run num">計時中 ${el} ／ ${lim} 分</span>`);
+    meta.push(`<span class="chip run num">計時中 ${el}／${lim} 分</span>`);
     cls += " running";
-    if (el >= lim) { meta.push(`<span class="chip over">已到預估時間：按「超時／卡住」選一個處理方式</span>`); cls += " overtime"; }
-  } else if ((t.accumMin || 0) > 0 && isOpen(t)) meta.push(`<span class="chip num">這一步已累積 ${t.accumMin} 分</span>`);
-  if (t.plannedDate && isOpen(t)) meta.push(`<span class="chip">排在 ${mdw(t.plannedDate)}</span>`);
-  if (t.status === "week" && !t.plannedDate) meta.push(`<span class="chip">本週清單</span>`);
+    if (el >= lim) { meta.push(`<span class="chip over">已到預估時間，按「超時／卡住」選一個處理方式</span>`); cls += " overtime"; }
+  } else if ((t.accumMin || 0) > 0 && isOpen(t)) facts.push(`這一步已累積 ${t.accumMin} 分`);
+  if (t.plannedDate && isOpen(t) && mode !== "today") facts.push(`排在 ${mdw(t.plannedDate)}`);
+  if (t.status === "week" && !t.plannedDate && mode === "list") facts.push("本週清單");
   if (t.due) meta.push(`<span class="chip${t.due < todayKey() && isOpen(t) ? " flag" : ""}">期限 ${md(t.due)}</span>`);
   for (const tag of (t.tags || [])) meta.push(`<span class="chip">${esc(tag)}</span>`);
-  if ((t.deferCount || 0) >= 1) meta.push(`<span class="chip${t.deferCount >= 3 ? " flag" : ""}">已改期 ${t.deferCount} 次</span>`);
+  if ((t.deferCount || 0) >= 1) meta.push(`<span class="chip${t.deferCount >= 3 ? " flag" : " sug"}">已改期 ${t.deferCount} 次</span>`);
   const steps = stepsOf(t.id);
-  if (steps) meta.push(`<span class="chip ok">完成 ${steps} 步</span>`);
-  if (t.status === "done") meta.push(`<span class="chip ok">已完成 ${t.doneDate ? md(t.doneDate) : ""}</span>`);
+  if (steps) facts.push(`已完成 ${steps} 步`);
+  if (t.status === "done") meta.push(`<span class="chip ok">${t.doneDate ? md(t.doneDate) + " " : ""}完成</span>`);
   if (t.status === "dropped") meta.push(`<span class="chip">已放棄</span>`);
   if (t.flag) meta.push(`<span class="chip flag">${esc(t.flag)}</span>`);
+  if (facts.length) meta.splice(1, 0, `<span class="facts num">${facts.map(f => `<span>${f}</span>`).join("")}</span>`);
 
   let actions = "";
   if (mode === "today") {
@@ -538,7 +599,7 @@ function goalsBlock(scope, key, goals) {
   for (const a of order) {
     const gs = goals.filter(g => g.area === a);
     const isF = focus.includes(a), limit = isF ? 2 : 1;
-    h += `<div class="ga"><div class="ga-h">${areaChip(a)}<span>${isF ? `主攻 · 建議 1–${limit} 個` : `維持 · 建議最多 ${limit} 個`}</span>${gs.length > limit ? `<span class="chip flag">超過建議數量</span>` : ""}</div>`;
+    h += `<div class="ga"><div class="ga-h">${areaChip(a)}<span>${isF ? `主攻，建議 1–${limit} 個` : `維持，建議最多 ${limit} 個`}</span>${gs.length > limit ? `<span class="chip flag">超過建議數量</span>` : ""}</div>`;
     h += gs.length ? gs.map(g => `<div class="goal${g.done ? " done" : ""}">
         <button class="box" data-act="goal-toggle" data-gid="${esc(g.id)}" aria-pressed="${!!g.done}" aria-label="切換完成">${g.done ? "✓" : ""}</button>
         <span class="txt">${esc(g.text)} ${g.suggested ? `<span class="chip sug">建議，待你確認</span>` : ""}</span>
@@ -561,7 +622,7 @@ function countersBlock(scope, key, targets) {
     const goalTxt = t.stretch ? `${t.target}–${t.stretch}` : `${t.target}`;
     const pct = Math.min(100, n / (t.stretch || t.target) * 100);
     return `<div class="ctr${met ? " met" : ""}">
-      <span class="nm">${esc(t.label)}<small>目標 ${goalTxt} ${esc(t.unit || "次")}${met ? " · 達成 +" + (scope === "week" ? 30 : 50) + " XP" : ""}</small></span>
+      <span class="nm">${esc(t.label)}<small>目標 ${goalTxt} ${esc(t.unit || "次")}${met ? "，已達成 +" + (scope === "week" ? 30 : 50) + " XP" : ""}</small></span>
       <span class="ctl"><button class="sq" data-act="count" data-scope="${scope}" data-key="${key}" data-tid="${esc(t.id)}" data-d="-1" aria-label="減少">−</button><b>${n} / ${goalTxt}</b><button class="sq" data-act="count" data-scope="${scope}" data-key="${key}" data-tid="${esc(t.id)}" data-d="1" aria-label="增加">＋</button></span>
       <div class="bar"><i style="width:${pct}%"></i></div></div>`;
   }).join("");
@@ -571,9 +632,10 @@ function viewWeek() {
   const ws = addDays(weekStart(tk), UI.weekOffset * 7), key = isoWeek(ws);
   const label = UI.weekOffset === 0 ? "本週" : UI.weekOffset === 1 ? "下週" : UI.weekOffset === -1 ? "上週" : (UI.weekOffset > 0 ? `${UI.weekOffset} 週後` : `${-UI.weekOffset} 週前`);
   const nav = `<div class="nav3"><button class="btn sm" data-act="nav-week" data-d="-1">‹ 前一週</button>
-    <span class="num">${label} · ${key.replace("-W", " 第 ")} 週 · ${md(ws)} – ${md(addDays(ws, 6))}</span>
+    <span class="num"><b>${label}</b><small>第 ${+key.slice(6)} 週，${md(ws)} – ${md(addDays(ws, 6))}</small></span>
     <button class="btn sm" data-act="nav-week" data-d="1">下一週 ›</button></div>`;
-  let html = win("週目標", "Weekly Goals", nav + `<div style="margin-top:12px">${goalsBlock("week", key, goalsFor("week", key))}</div>`, { sub: "週目標完成一個 +50 XP。" });
+  const wg = goalsFor("week", key), rvw = getReview(key);
+  let html = pageHead(UI.weekOffset === 0 ? "本週" : label, `週目標完成 ${nb(wg.filter(g => g.done).length)}／${nb(wg.length)}，週回顧${rvw.done ? "已完成" : "還沒做"}。`) + win("週目標", "Weekly Goals", nav + `<div style="margin-top:12px">${goalsBlock("week", key, goalsFor("week", key))}</div>`, { sub: "週目標完成一個 +50 XP。" });
   html += win("每週指標", "Weekly Targets", countersBlock("week", key, cfg.weekTargets || []), { sub: "做完就按 ＋。" });
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
@@ -613,9 +675,11 @@ function viewMonth() {
   const mk = ymd(base).slice(0, 7);
   const qk = quarterKeyOf(ymd(base)), q = getQuarter(qk);
   const nav = `<div class="nav3"><button class="btn sm" data-act="nav-month" data-d="-1">‹ 上個月</button>
-    <span class="num">${base.getFullYear()} 年 ${base.getMonth() + 1} 月</span>
+    <span class="num"><b>${base.getMonth() + 1} 月</b><small>${base.getFullYear()} 年</small></span>
     <button class="btn sm" data-act="nav-month" data-d="1">下個月 ›</button></div>`;
-  let html = win("月目標", "Monthly Goals", nav + `<div style="margin-top:12px">${goalsBlock("month", mk, goalsFor("month", mk))}</div>`, { sub: "月目標完成一個 +100 XP。" });
+  const mg = goalsFor("month", mk);
+  const mCleared = Object.entries(S.days).filter(([k, d]) => k.startsWith(mk) && dayScore(d, cfg).coreAll).length;
+  let html = pageHead(UI.monthOffset === 0 ? "本月" : `${base.getMonth() + 1} 月`, `月目標完成 ${nb(mg.filter(g => g.done).length)}／${nb(mg.length)}，${base.getMonth() + 1} 月有 ${nb(mCleared)} 天完成核心任務。`) + win("月目標", "Monthly Goals", nav + `<div style="margin-top:12px">${goalsBlock("month", mk, goalsFor("month", mk))}</div>`, { sub: "月目標完成一個 +100 XP。" });
   html += win("每月指標", "Monthly Targets", countersBlock("month", mk, cfg.monthTargets || []) +
     `<div class="sec-label">本季新興趣（${qk.replace("-", " ")}）</div>
      <div class="inline"><input type="text" id="qi-${qk}" value="${esc(q.interest || "")}" placeholder="這一季要接觸的新興趣或新領域">
@@ -637,7 +701,7 @@ function viewMonth() {
     <div class="legend"><span><i style="background:rgba(92,200,255,.12)"></i>做了一部分</span><span><i style="background:rgba(92,200,255,.32)"></i>核心項目完成</span><span><i style="background:rgba(92,200,255,.6)"></i>全部完成</span><span><i style="border-color:var(--warn)"></i>今天</span></div>`,
     { side: `${cleared} 天達成` });
   const lg = cfg.longGoals || [];
-  html += win("三年目標", "Long Goals", lg.length ? `<div class="list">${lg.map(g => `<div class="task" style="${areaStyle(g.area)}"><div class="meta">${areaChip(g.area)}</div><div class="title">${esc(g.text)}</div></div>`).join("")}</div>`
+  html += win("三年目標", "Long Goals", lg.length ? `<div class="list">${lg.map(g => `<div class="lgoal" style="${areaStyle(g.area)}">${areaChip(g.area)}<p>${esc(g.text)}</p></div>`).join("")}</div>`
     : `<div class="empty">還沒有設定長期目標。</div>`);
   return html;
 }
@@ -646,7 +710,8 @@ function viewMonth() {
 function viewBacklog() {
   const all = tasksList();
   const flagged = all.filter(t => t.flag && isOpen(t));
-  let html = win("新增任務", "New Quest", `<form id="addForm" class="list" autocomplete="off">
+  const openAll = all.filter(isOpen).length, weekAll = all.filter(t => t.status === "week").length;
+  let html = pageHead("任務庫", `${nb(openAll)} 件進行中，其中 ${nb(weekAll)} 件在本週清單。所有待辦都記在這裡。`) + win("新增任務", "New Quest", `<form id="addForm" class="list" autocomplete="off">
       <label class="fld" for="na-title">任務名稱<input type="text" id="na-title" placeholder="例如：完成交易系統每日流程草稿" required></label>
       <label class="fld" for="na-next">下一步（具體到可以直接開始的動作）<input type="text" id="na-next" placeholder="例如：列出每天要看的 5 個資訊來源"></label>
       <div class="grid2">
@@ -669,9 +734,9 @@ function viewBacklog() {
   else if (!list.length) body += `<div class="empty" style="margin-top:12px">這個篩選條件下沒有任務。</div>`;
   else for (const a of AREA_ORDER) {
     const g = list.filter(t => t.area === a); if (!g.length) continue;
-    body += `<div class="sec-label" style="margin-top:16px">${AREAS[a].name} · ${g.length} 件</div><div class="list">${g.map(t => taskCard(t)).join("")}</div>`;
+    body += `<div class="sec-label" style="margin-top:16px">${AREAS[a].name} ${g.length} 件</div><div class="list">${g.map(t => taskCard(t)).join("")}</div>`;
   }
-  html += win("任務庫", "Quest Log", body, { side: `${all.filter(isOpen).length} 件進行中` });
+  html += win("任務庫", "Quest Log", body);
   return html;
 }
 
@@ -693,7 +758,7 @@ function viewRules() {
     ["一天的分界", `凌晨 ${DAY_ROLLOVER_HOURS} 點前做的事算前一天，所以半夜覆盤不會被算到隔天。`],
     ["作息調整", sp || "依設定逐步調整就寢與起床時間。"]
   ];
-  let html = win("系統規則", "Rules", rules.map((r, i) => `<div class="rule-item"><h3><span>${pad(i + 1)}</span>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>`).join(""));
+  let html = pageHead("規則", "這套系統怎麼運作，經驗值和等級怎麼算。") + win("系統規則", "Rules", rules.map((r, i) => `<div class="rule-item"><h3>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>`).join(""));
   const xpRows = [
     ["每日任務（閱讀、覆盤）", "各 +15"], ["徒手訓練（每項做滿 2 組）", "各 +10，做滿 3 組再 +5"], ["作息（準時上床、準時起床）", "各 +10"],
     ["核心每日任務全部完成", "+20，連續天數 +1"], ["主線步驟（25／50／90 分鐘）", "+20／+40／+70"], ["拆分時已完成的部分", "該步驟的一半"],
@@ -703,7 +768,7 @@ function viewRules() {
     <p class="hint" style="margin-top:10px">升級門檻：Lv.N 升到 Lv.N+1 需要的累積經驗值是 50 × N × (N+1)。領域數值＝該領域累積經驗值 ÷ 10。評級：Lv.1–4 E 級、5–9 D 級、10–19 C 級、20–34 B 級、35–49 A 級、50 以上 S 級。</p>`);
   const sync = lastLoad ? new Date(lastLoad) : null;
   html += win("資料", "Data", `<div class="foot">
-      <span>版本 ${VERSION} · ${store.mode === "demo" ? "展示模式（不儲存）" : `已連線 Supabase${sync ? ` · 上次同步 ${pad(sync.getHours())}:${pad(sync.getMinutes())}` : ""}`}</span>
+      <span>版本 ${VERSION}，${store.mode === "demo" ? "展示模式（不儲存）" : `已連線 Supabase${sync ? `，上次同步 ${pad(sync.getHours())}:${pad(sync.getMinutes())}` : ""}`}</span>
       <span class="row-actions"><button class="btn sm" data-act="reload">重新同步</button><button class="btn sm" data-act="export">匯出全部資料（JSON）</button>${store.mode === "demo" ? "" : `<button class="btn ghost sm" data-act="signout">登出</button>`}</span>
     </div><p class="hint" style="margin-top:8px">每日任務、上限、固定行程這些設定存在 Supabase 的 settings 表（config 欄位）。</p>`);
   return html;
@@ -712,7 +777,7 @@ function viewRules() {
 /* ================= actions ================= */
 const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
 function closePanel() { UI.panel = null; }
-function afterQuest(before) { const after = dayScore(getDay(todayKey()), C()).coreAll; if (!before && after) { UI.justCleared = true; toast("每日任務完成", "核心每日任務全部達成，額外 +20 XP"); } }
+function afterQuest(before) { const after = dayScore(getDay(todayKey()), C()).coreAll; if (!before && after) { UI.justCleared = true; notice("quest", "每日任務完成", "核心任務全部達成", "+20 XP，連續天數 +1"); } }
 
 const ACT = {
   tab(el) { UI.tab = el.dataset.v; UI.panel = null; try { localStorage.setItem("rex-tab", UI.tab); } catch (e) {} window.scrollTo({ top: 0 }); },
@@ -720,9 +785,10 @@ const ACT = {
     const tk = todayKey(), id = el.dataset.id, cfg = C();
     const before = dayScore(getDay(tk), cfg).coreAll;
     const on = getDay(tk).dq[id] ? 0 : 1;
+    const rect = el.getBoundingClientRect();
     setQuest(tk, id, on);
     const q = cfg.dailies.find(x => x.id === id);
-    if (on && q) toast("通知", `${q.label} 完成，+${q.xp} XP`);
+    if (on && q) fx(`+${q.xp}`, rect);
     afterQuest(before);
   },
   "dq-set"(el) {
@@ -732,7 +798,9 @@ const ACT = {
     const next = cur === n ? n - 1 : n;
     setQuest(tk, id, next);
     const q = cfg.dailies.find(x => x.id === id);
-    if (q && next >= (q.min || 1) && cur < (q.min || 1)) toast("通知", `${q.label} 達標，+${q.xp} XP`);
+    const rect = el.getBoundingClientRect();
+    if (q && next >= (q.min || 1) && cur < (q.min || 1)) fx(`+${q.xp}`, rect);
+    else if (q && next >= (q.sets || 3) && cur < (q.sets || 3)) fx("+5", rect);
     afterQuest(before);
   },
   energy(el) { const n = +el.dataset.v, tk = todayKey(); setMeta(tk, { energy: getMeta(tk).energy === n ? null : n }); },
@@ -900,6 +968,13 @@ document.addEventListener("submit", async e => {
 window.addEventListener("hashchange", () => { if (/^#(today|week|month|backlog|rules)$/.test(location.hash)) { UI.tab = location.hash.slice(1); render(true); } });
 
 /* ================= auth & loading ================= */
+function bootFx() {
+  let seen = false;
+  try { seen = sessionStorage.getItem("sl-boot") === "1"; sessionStorage.setItem("sl-boot", "1"); } catch (e) {}
+  if (seen) return;
+  document.body.classList.add("boot");
+  setTimeout(() => document.body.classList.remove("boot"), 2200);
+}
 function showLogin() { $("#app").hidden = true; $("#login").hidden = false; $("#li-err").textContent = ""; }
 function showApp() { $("#login").hidden = true; $("#app").hidden = false; $("#modeTag").hidden = store.mode !== "demo"; }
 async function doLogin() {
@@ -920,7 +995,9 @@ async function load(force) {
   if (store.mode === "demo" && loaded && !force) return;
   try {
     S = await store.loadAll();
+    const first = !loaded;
     loaded = true; loadError = null; lastLoad = Date.now();
+    if (first) bootFx();
   } catch (e) {
     if (isAuthError(e)) { showLogin(); return; }
     loadError = (e && e.message) || "未知錯誤";

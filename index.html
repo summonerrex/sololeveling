@@ -6,7 +6,8 @@
 <title>Solo Leveling</title>
 <meta name="application-name" content="Solo Leveling">
 <meta name="apple-mobile-web-app-title" content="Solo Leveling">
-<meta name="theme-color" content="#060a13">
+<meta name="description" content="Rex 的個人任務系統：每日任務、主線、週回顧與等級。">
+<meta name="theme-color" content="#060912">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -15,15 +16,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=2026-10-14.1">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="styles.css?v=2026-10-16.1">
+<style>:root{padding-top:env(safe-area-inset-top,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
 </head>
 <body>
-<div class="wrap">
-  <section class="win login" id="login" hidden aria-label="登入">
-    <div class="win-h"><h2>系統登入</h2><span class="en">Sign in</span><span class="rule"></span></div>
-    <p class="win-sub">用 Supabase 裡建立的帳號登入。每台裝置只需要登入一次。</p>
+<div class="login-wrap" id="login" hidden>
+  <section class="hero login" aria-label="登入">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 6l26 26-26 26L6 32z" fill="none" stroke="#2a3c62" stroke-width="1.5"/><path d="M32 16l16 16-16 16-16-16z" fill="#4db8ff" opacity=".18"/><path d="M32 16l16 16-16 16-16-16z" fill="none" stroke="#4db8ff" stroke-width="2"/><circle cx="32" cy="32" r="4" fill="#a8ddff"/></svg>
+      <div><strong>Solo Leveling</strong><span>個人任務系統</span></div>
+    </div>
+    <p class="login-sub">用 Supabase 裡建立的帳號登入。每台裝置只需要登入一次。</p>
     <form id="loginForm" autocomplete="on">
       <label class="fld" for="li-email">Email<input type="email" id="li-email" autocomplete="username" required></label>
       <label class="fld" for="li-pw">密碼<input type="password" id="li-pw" autocomplete="current-password" required></label>
@@ -31,38 +35,46 @@
       <div class="err" id="li-err" role="alert"></div>
     </form>
   </section>
+</div>
 
-  <div id="app" hidden>
-    <section class="win status" id="status" aria-label="狀態">
-      <div class="sys"><span><b>SYSTEM</b> · 狀態視窗 <span class="mode" id="modeTag" hidden>展示模式</span></span><span id="clock" class="num"></span></div>
-      <div class="player">
-        <div class="lv"><b id="lvNum">1</b><span>LEVEL</span></div>
-        <div class="pinfo">
-          <div class="pname"><strong id="pName">PLAYER</strong><span class="rank" id="pRank">E 級</span></div>
-          <div class="bar" aria-hidden="true"><i id="xpBar" style="width:0%"></i></div>
-          <div class="xpmeta num" id="xpMeta">正在讀取資料…</div>
+<div class="shell" id="app" hidden>
+  <aside class="rail">
+    <section class="hero" id="status" aria-label="角色狀態">
+      <span class="mode" id="modeTag" hidden>展示模式</span>
+      <div class="hero-top"><div class="dateline" id="resetLine"></div><span class="clock num" id="clock"></span></div>
+      <div class="hero-main">
+        <div class="ring" role="img" id="ringBox" aria-label="等級進度">
+          <svg id="ringSvg" viewBox="0 0 120 120" aria-hidden="true"></svg>
+          <div class="ring-c"><b id="lvNum">1</b><span>等級</span></div>
         </div>
-        <div class="streak"><b id="streakNum">0</b><span>連續完成天數</span></div>
+        <div class="hero-id">
+          <div class="pname"><strong id="pName">PLAYER</strong><span class="rank" id="pRank">E 級</span></div>
+          <div class="xpbar" aria-hidden="true"><i id="xpBar"></i></div>
+          <div class="xpmeta num" id="xpMeta">正在讀取資料…</div>
+          <div class="streak" id="streak"></div>
+        </div>
       </div>
       <div class="stats" id="stats"></div>
-      <div class="reset" id="resetLine"></div>
     </section>
 
     <nav class="tabs" role="tablist" aria-label="面板分頁">
-      <button role="tab" data-act="tab" data-v="today" id="tab-today">今日</button>
-      <button role="tab" data-act="tab" data-v="week" id="tab-week">本週</button>
-      <button role="tab" data-act="tab" data-v="month" id="tab-month">本月</button>
-      <button role="tab" data-act="tab" data-v="backlog" id="tab-backlog">任務庫</button>
-      <button role="tab" data-act="tab" data-v="rules" id="tab-rules">規則</button>
+      <button role="tab" data-act="tab" data-v="today" id="tab-today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"/><circle cx="12" cy="12" r="2.4"/></svg><span>今日</span></button>
+      <button role="tab" data-act="tab" data-v="week" id="tab-week"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19V11M9.5 19V6M14.5 19v-9M19.5 19V8"/></svg><span>本週</span></button>
+      <button role="tab" data-act="tab" data-v="month" id="tab-month"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9.3 10v10M14.7 10v10M8 3v4M16 3v4"/></svg><span>本月</span></button>
+      <button role="tab" data-act="tab" data-v="backlog" id="tab-backlog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 16.5l8 4 8-4"/></svg><span>任務庫</span></button>
+      <button role="tab" data-act="tab" data-v="rules" id="tab-rules"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v6c0 4.4-3.1 7.6-7.5 9-4.4-1.4-7.5-4.6-7.5-9V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.6"/></svg><span>規則</span></button>
     </nav>
+    <section class="railweek" id="railWeek" aria-label="本週每日任務完成情況"></section>
+  </aside>
 
+  <div class="main">
     <div id="banner"></div>
-    <main id="view" class="wrap" style="padding:0;max-width:none"></main>
+    <main id="view"></main>
   </div>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script src="vendor/supabase.js"></script>
-<script type="module" src="js/app.js?v=2026-10-14.1"></script>
+<script type="module" src="js/app.js?v=2026-10-16.1"></script>
 </body>
 </html>
