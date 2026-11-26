@@ -66,6 +66,11 @@ export function demoState() {
     goals: {},
     counters: {},
     reviews: {},
-    quarters: {}
+    quarters: {},
+    ideas: {
+      n1: { body: "範例：交易流程可以先只看 3 個指標，其他的週末再看", area: "invest", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 3 * 3600e3).toISOString(), logDate: today, processedAt: null },
+      n2: { body: "範例：留存分析裡「組成變化」和「行為變化」要分開說明，可以整理成一則筆記", area: "career", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 26 * 3600e3).toISOString(), logDate: today, processedAt: null },
+      n3: { body: "範例：辛普森悖論在分層報表裡怎麼提醒讀者", area: "career", status: "note", hint: "寫成一則知識點，附一個例子", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 50 * 3600e3).toISOString(), logDate: today, processedAt: new Date(Date.now() - 49 * 3600e3).toISOString() }
+    }
   };
 }

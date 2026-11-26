@@ -118,7 +118,7 @@ a{color:var(--mana-2)}
 
 /* ---------- navigation ---------- */
 .tabs{
-  position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(5,1fr);
+  position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(6,1fr);
   padding:6px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px));
   background:rgb(6 9 18 / .92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line)
 }
@@ -445,3 +445,40 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .rule-item h3::before{content:"";flex:0 0 auto;width:6px;height:6px;transform:rotate(45deg) translateY(-2px);background:var(--mana-2);opacity:.8}
 .lgoal{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}
 .lgoal p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink)}
+
+/* ---------- ideas: badge, capture button, capture window, idea cards ---------- */
+.badge{position:absolute;top:4px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--warn);color:#2a1a00;font-family:var(--f-display);font-size:12px;font-weight:700;line-height:17px;text-align:center}
+.fab{position:fixed;right:16px;bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom,0px));z-index:45;width:56px;height:56px;border-radius:14px;border:0;background:var(--mana);color:var(--mana-ink);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgb(0 0 0 / .45),0 0 22px rgb(77 184 255 / .45);transition:transform .12s}
+.fab:active{transform:scale(.94)}
+.fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.fab span,.fab kbd{display:none}
+.shell{padding-bottom:calc(var(--nav-h) + 96px + env(safe-area-inset-bottom,0px))}
+dialog.capture{width:min(560px,calc(100% - 24px));max-height:calc(100% - 24px);margin:auto;padding:18px;border:1px solid rgb(77 184 255 / .55);border-radius:12px;background:rgb(10 17 34 / .98);color:var(--ink);box-shadow:0 20px 60px rgb(0 0 0 / .6),0 0 40px rgb(77 184 255 / .18)}
+dialog.capture::backdrop{background:rgb(3 6 14 / .65);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+dialog.capture[open]{animation:cap-in .22s cubic-bezier(.2,.7,.2,1)}
+@keyframes cap-in{from{opacity:0;transform:translateY(12px)}}
+.cap-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cap-h h2{margin:0;font-size:18px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:10px}
+.cap-h h2::before{content:"";width:7px;height:7px;transform:rotate(45deg);background:var(--mana);box-shadow:0 0 8px var(--mana)}
+.cap-f{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cap-f .btn{min-width:110px}
+#cap-text,#qc-text{font-size:16px}
+.idea{border:1px solid var(--line);background:var(--raise);padding:12px 14px;border-radius:8px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.idea.processed{opacity:.78}
+.idea-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12.5px;color:var(--ink-3)}
+.idea-h time{font-family:var(--f-display);font-size:14px;font-weight:500;color:var(--ink-2);letter-spacing:.02em;margin-right:2px}
+.idea-body{margin:0;font-size:15px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.idea-sub{margin:0;font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
+@media (max-width:560px){
+  .idea .row-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .idea .row-actions .btn{width:100%}
+  .tabs button{font-size:11px}
+}
+@media (min-width:1080px){
+  .shell{padding-bottom:56px}
+  .fab{position:static;width:100%;height:46px;border-radius:10px;justify-content:flex-start;gap:10px;padding:0 16px;font-size:15px;font-weight:700;box-shadow:0 0 18px rgb(77 184 255 / .25)}
+  .fab svg{width:20px;height:20px}
+  .fab span{display:inline}
+  .fab kbd{display:inline-block;margin-left:auto;font-family:var(--f-display);font-size:13px;padding:0 7px;border-radius:4px;border:1px solid rgb(3 18 31 / .35);line-height:20px}
+  .badge{left:auto;right:12px;top:50%;transform:translateY(-50%)}
+}

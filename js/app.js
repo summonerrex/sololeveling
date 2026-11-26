@@ -1,7 +1,7 @@
 // Solo Leveling（Rex 的任務面板）：畫面與操作邏輯。資料讀寫都交給 store.js。
-import { createStore, isAuthError } from "./store.js?v=2026-10-16.1";
-import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-10-16.1";
-import { VERSION } from "./version.js?v=2026-10-16.1";
+import { createStore, isAuthError } from "./store.js?v=2026-11-26.1";
+import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-11-26.1";
+import { VERSION } from "./version.js?v=2026-11-26.1";
 
 /* ================= constants ================= */
 const AREAS = {
@@ -29,7 +29,7 @@ const BLOCKERS = [
 ];
 const BLOCKER_LABEL = Object.fromEntries(BLOCKERS);
 const REVIEW_STEPS = [
-  "把這週冒出來的新事情全部加進任務庫，包括 Notion 裡還沒搬過來的待辦",
+  "清空想法收件匣，並把這週冒出來的待辦（包括 Notion 裡還沒搬過來的）全部加進任務庫",
   "處理「待處理」和「停滯」的任務：拆小、排日期，或放棄",
   "每個領域選本週目標：主攻領域各 1–2 個，維持領域各最多 1 個",
   "把本週清單排進每一天，不超過每日上限",
@@ -42,9 +42,9 @@ let S = emptyState();
 let loaded = false, loadError = null, lastLoad = 0, pending = 0, lastLevel = null;
 const UI = { tab: "today", panel: null, weekOffset: 0, monthOffset: 0, fArea: "all", fStatus: "open", justCleared: false, overNotified: new Set() };
 try { const t = localStorage.getItem("rex-tab"); if (t) UI.tab = t; } catch (e) {}
-if (/^#(today|week|month|backlog|rules)$/.test(location.hash)) UI.tab = location.hash.slice(1);
+if (/^#(today|week|month|backlog|ideas|rules)$/.test(location.hash)) UI.tab = location.hash.slice(1);
 
-function emptyState() { return { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {} }; }
+function emptyState() { return { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {}, ideas: {} }; }
 
 /* ================= utils ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -126,6 +126,9 @@ const ctrKey = (scope, key, tid) => `${scope}|${key}|${tid}`;
 function countsFor(scope, key) { const out = {}; for (const [k, v] of Object.entries(S.counters)) { const [s, p, t] = k.split("|"); if (s === scope && p === key) out[t] = v; } return out; }
 function getReview(key) { return S.reviews[key] || { steps: [], done: false, note: "", doneAt: null }; }
 function putReview(key, r) { S.reviews[key] = r; track(store.putReview(key, r)); }
+function ideasList() { return Object.entries(S.ideas || {}).map(([id, i]) => Object.assign({ id }, i)); }
+function putIdea(id, i) { S.ideas[id] = i; track(store.putIdea(id, i)); }
+function delIdea(id) { delete S.ideas[id]; track(store.delIdea(id)); }
 function getQuarter(k) { return S.quarters[k] || { interest: "", done: false }; }
 function putQuarter(k, q) { S.quarters[k] = q; track(store.putQuarter(k, q)); }
 
@@ -226,7 +229,7 @@ function render(force) {
   const v = UI.tab;
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.v === v));
   renderBanner();
-  $("#view").innerHTML = !loaded ? "" : v === "week" ? viewWeek() : v === "month" ? viewMonth() : v === "backlog" ? viewBacklog() : v === "rules" ? viewRules() : viewToday();
+  $("#view").innerHTML = !loaded ? "" : v === "week" ? viewWeek() : v === "month" ? viewMonth() : v === "backlog" ? viewBacklog() : v === "rules" ? viewRules() : v === "ideas" ? viewIdeas() : viewToday();
 }
 function renderBanner() {
   const b = $("#banner");
@@ -287,6 +290,8 @@ function renderHeader() {
   const sc = dayScore(getDay(tk), cfg);
   if (loaded && sc.coreAll) reset += `<span class="chip ok">核心任務完成</span>`;
   $("#resetLine").innerHTML = reset;
+  const inboxN = ideasList().filter(i => i.status === "inbox").length, ib = $("#ideaBadge");
+  if (ib) { ib.textContent = inboxN; ib.hidden = !inboxN; }
   const ws0 = weekStart(tk);
   let wcells = "", wdone = 0, wpast = 0;
   for (let k = 0; k < 7; k++) {
@@ -363,7 +368,7 @@ function viewToday() {
   const hr = new Date().getHours(), evening = hr >= 20 || hr < DAY_ROLLOVER_HOURS;
   const jump = `<div class="inline" style="margin-top:10px"><a class="btn sm" href="#review-win">${hasReview(getMeta(tk)) ? "查看今天的每日覆盤" : "寫今天的每日覆盤"}</a><span class="hint">${evening ? "就在下方" : "在頁面下方"}</span></div>`;
   const left = sc.total - sc.done, todayOpen = plannedOn(tk).length, carryN = tasksList().filter(t => isOpen(t) && t.plannedDate && t.plannedDate < tk).length;
-  const todaySum = (left ? `還有 ${nb(left)} 項每日任務` : "每日任務全部完成") + (todayOpen ? `，主線 ${nb(todayOpen)} 件` : "，今天沒有排主線") + (carryN ? `，另有 ${nb(carryN)} 件待處理` : "") + "。";
+  const todaySum = (left ? `還有 ${nb(left)} 項每日任務` : "每日任務全部完成") + (todayOpen ? `，主線 ${nb(todayOpen)} 件` : "，今天沒有排主線") + (carryN ? `，另有 ${nb(carryN)} 件待處理` : "") + (ideasList().some(i => i.status === "inbox") ? `，想法收件匣 ${nb(ideasList().filter(i => i.status === "inbox").length)} 則未整理` : "") + "。";
   const chargeBar = `<div class="charge" aria-hidden="true"><i style="width:${(sc.done / Math.max(1, sc.total) * 100).toFixed(0)}%"></i></div>`;
   let html = pageHead("今日", todaySum) + win("每日任務", "Daily Quest", `${chargeBar}<div class="list">${rows}</div>${clear}${metaRow}${jump}`, { side: `${sc.done} / ${sc.total}`, cls: "quest" });
   if (evening) html += reviewWindow(tk);
@@ -740,13 +745,144 @@ function viewBacklog() {
   return html;
 }
 
+/* ================= IDEAS ================= */
+const IDEA_STATUS = { inbox: "未整理", note: "等 Claude 寫成筆記", noted: "已寫進記憶庫", action: "已轉成行動項目", archived: "已封存" };
+const firstLine = s => (String(s || "").split(/\n/).find(x => x.trim()) || "").trim();
+function ideaTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()}（${DOW[d.getDay()]}）${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function areaSelect(id, val, allowNone) {
+  return `<select id="${id}">${allowNone ? `<option value=""${!val ? " selected" : ""}>不分類</option>` : ""}${AREA_ORDER.map(a => `<option value="${a}"${val === a ? " selected" : ""}>${AREAS[a].name}</option>`).join("")}</select>`;
+}
+function captureFields(prefix) {
+  const chips = [["", "不分類"], ...AREA_ORDER.map(a => [a, AREAS[a].name])].map(([v, l], k) =>
+    `<label class="chipbox"><input type="radio" name="${prefix}-area" value="${v}"${k === 0 ? " checked" : ""}><span>${l}</span></label>`).join("");
+  return `<textarea id="${prefix}-text" rows="4" placeholder="想到什麼就寫，不用分類、不用寫完整，晚點再整理" aria-label="想法內容"></textarea>
+    <div class="fld"><span>領域（選填）</span><div class="chips" role="radiogroup" aria-label="領域">${chips}</div></div>`;
+}
+function ideaCard(i) {
+  const open = UI.panel && UI.panel.id === i.id ? UI.panel.kind : null;
+  const st = i.status;
+  const stChip = st === "inbox" ? "" : `<span class="chip ${st === "note" ? "run" : st === "archived" ? "" : "ok"}">${IDEA_STATUS[st] || st}</span>`;
+  let extra = "";
+  if (i.hint && (st === "note" || st === "noted")) extra += `<p class="idea-sub">筆記方向：${esc(i.hint)}</p>`;
+  if (st === "noted" && i.noteRef) extra += `<p class="idea-sub">筆記位置：${esc(i.noteRef)}</p>`;
+  if ((i.taskIds || []).length) extra += `<p class="idea-sub">行動項目：${i.taskIds.map(t => esc((S.tasks[t] || {}).title || "（任務已刪除）")).join("、")}</p>`;
+  const b = (cls, act, label, kind) => kind
+    ? `<button class="btn ${cls} sm" data-act="panel" data-id="${i.id}" data-kind="${kind}">${label}</button>`
+    : `<button class="btn ${cls} sm" data-act="${act}" data-id="${i.id}">${label}</button>`;
+  let actions = "";
+  if (st === "inbox") actions = b("pri", "", "轉成行動項目", "i-task") + b("", "", "交給 Claude 寫筆記", "i-note") + b("", "idea-archive", "封存") + b("ghost", "", "編輯", "i-edit");
+  else if (st === "note") actions = b("", "", "標記已寫進記憶庫", "i-noted") + b("", "idea-back", "改回未整理") + b("ghost", "", "編輯", "i-edit");
+  else if (st === "archived") actions = b("", "idea-back", "放回收件匣") + b("danger", "", "刪除", "i-del");
+  else actions = b("", "", "再開一個行動項目", "i-task") + b("ghost", "", "編輯", "i-edit");
+  return `<article class="idea${st === "inbox" ? "" : " processed"}"${i.area ? ` style="${areaStyle(i.area)}"` : ""}>
+    <div class="idea-h"><time datetime="${esc(i.capturedAt)}">${ideaTime(i.capturedAt)}</time>${i.area ? areaChip(i.area) : ""}${stChip}</div>
+    <p class="idea-body">${esc(i.body)}</p>${extra}
+    <div class="row-actions">${actions}</div>
+    ${open ? ideaPanel(i, open) : ""}
+  </article>`;
+}
+function ideaPanel(i, kind) {
+  const id = i.id;
+  const cancel = `<button class="btn ghost sm" data-act="panel-close">取消</button>`;
+  if (kind === "i-task") return `<div class="panel-in"><div class="opt"><h4>轉成行動項目</h4>
+      <label class="fld" for="it-title-${id}">任務名稱<input type="text" id="it-title-${id}" value="${esc(firstLine(i.body).slice(0, 60))}"></label>
+      <label class="fld" for="it-next-${id}">下一步（具體到可以直接開始）<input type="text" id="it-next-${id}" placeholder="例如：列出 3 個要比較的方案"></label>
+      <div class="grid2">
+        <label class="fld" for="it-area-${id}">領域${areaSelect("it-area-" + id, i.area || "life")}</label>
+        <label class="fld" for="it-est-${id}">下一步預估時間${estSelect("it-est-" + id, 25)}</label>
+        <label class="fld" for="it-where-${id}">放到哪裡<select id="it-where-${id}"><option value="backlog">任務庫</option><option value="week">本週清單</option></select></label>
+      </div>
+      <span class="hint">想法原文會存在任務的備註裡。一則想法可以開好幾個行動項目。</span>
+      <div class="inline"><button class="btn pri sm" data-act="idea-task" data-id="${id}">建立行動項目</button>${cancel}</div></div></div>`;
+  if (kind === "i-note") return `<div class="panel-in"><div class="opt"><h4>交給 Claude 寫成記憶庫筆記</h4>
+      <label class="fld" for="in-hint-${id}">筆記方向（選填）<textarea id="in-hint-${id}" rows="2" placeholder="例如：整理成一則知識點，附一個遊戲營運的例子">${esc(i.hint || "")}</textarea></label>
+      <span class="hint">之後在 Claude Code 說「整理想法」，Claude 會把這類想法寫成筆記放進記憶庫，寫完自動標記。</span>
+      <div class="inline"><button class="btn pri sm" data-act="idea-note" data-id="${id}">交給 Claude</button>${cancel}</div></div></div>`;
+  if (kind === "i-noted") return `<div class="panel-in"><div class="opt"><h4>標記已寫進記憶庫</h4>
+      <label class="fld" for="inr-ref-${id}">筆記位置（選填）<input type="text" id="inr-ref-${id}" placeholder="筆記的檔名或標題"></label>
+      <div class="inline"><button class="btn pri sm" data-act="idea-noted" data-id="${id}">標記完成</button>${cancel}</div></div></div>`;
+  if (kind === "i-edit") return `<div class="panel-in"><div class="opt"><h4>編輯想法</h4>
+      <textarea id="ie-body-${id}" rows="4" aria-label="想法內容">${esc(i.body)}</textarea>
+      <label class="fld" for="ie-area-${id}">領域${areaSelect("ie-area-" + id, i.area, true)}</label>
+      <div class="inline"><button class="btn pri sm" data-act="idea-edit-save" data-id="${id}">儲存</button>${cancel}<button class="btn danger sm" data-act="panel" data-id="${id}" data-kind="i-del" style="margin-left:auto">刪除</button></div></div></div>`;
+  if (kind === "i-del") return `<div class="panel-in"><div class="opt"><h4>刪除這則想法</h4>
+      <span class="hint">刪除後無法復原。已經建立的行動項目不受影響。</span>
+      <div class="inline"><button class="btn danger sm" data-act="idea-del" data-id="${id}">確定刪除</button>${cancel}</div></div></div>`;
+  return "";
+}
+function ideasForClaude(list) {
+  return "以下是 Solo Leveling 想法收件匣裡「等 Claude 寫成筆記」的想法。請依照記憶庫既有的筆記格式，把每則想法寫成筆記；不確定的內容請標示出來，不要自行補資料。\n\n" +
+    list.map((i, k) => `${k + 1}. 〔id: ${i.id}〕${ideaTime(i.capturedAt)}${i.area ? `｜${AREAS[i.area].name}` : ""}\n   內容：${i.body.replace(/\n/g, "\n   ")}${i.hint ? `\n   筆記方向：${i.hint}` : ""}`).join("\n\n") + "\n";
+}
+function viewIdeas() {
+  const all = ideasList();
+  const byCap = (a, b) => (b.capturedAt || "").localeCompare(a.capturedAt || "");
+  const inbox = all.filter(i => i.status === "inbox").sort(byCap);
+  const note = all.filter(i => i.status === "note").sort((a, b) => -byCap(a, b));
+  const doneAll = all.filter(i => !["inbox", "note"].includes(i.status)).sort((a, b) => (b.processedAt || b.capturedAt || "").localeCompare(a.processedAt || a.capturedAt || ""));
+  const done = UI.ideasAll ? doneAll : doneAll.slice(0, 15);
+  const sum = (inbox.length ? `收件匣有 ${nb(inbox.length)} 則未整理` : "收件匣已清空") + (note.length ? `，${nb(note.length)} 則等 Claude 寫成筆記` : "") + "。";
+  let html = pageHead("想法", sum);
+  if (store.ideasReady === false) html += `<div class="banner">資料庫還沒有想法收件匣的表。請在 Supabase SQL Editor 執行 2026-11-26-ideas.sql，再重新整理這個頁面。</div>`;
+  html += win("記下想法", "Capture", `<form id="quickForm" class="list" autocomplete="off">${captureFields("qc")}
+      <div class="inline"><button class="btn pri" type="submit">記下</button><span class="hint">任何分頁都能記：手機按右下角的＋，桌機按左欄按鈕或鍵盤 I。</span></div></form>`);
+  html += win("收件匣", "Inbox", inbox.length ? `<div class="list">${inbox.map(ideaCard).join("")}</div>`
+    : `<div class="empty">收件匣是空的。想到什麼就記下來，晚間覆盤時再整理。</div>`, { side: String(inbox.length), sub: inbox.length ? "每則選一個去處：轉成行動項目、交給 Claude 寫成筆記，或封存。" : "" });
+  const copyBox = UI.copyText ? `<label class="fld" for="copy-fallback" style="margin-bottom:10px">瀏覽器不允許自動複製，請手動全選複製<textarea id="copy-fallback" rows="6" readonly>${esc(UI.copyText)}</textarea></label>` : "";
+  html += win("等 Claude 寫成筆記", "For Claude", (note.length ? `${copyBox}<div class="inline" style="margin-bottom:10px"><button class="btn sm" data-act="idea-copy">複製給 Claude</button><span class="hint">貼到任何 Claude 對話也能處理</span></div><div class="list">${note.map(ideaCard).join("")}</div>`
+    : `<div class="empty">目前沒有等 Claude 處理的想法。</div>`), { side: String(note.length), sub: "在 Claude Code 說「整理想法」，Claude 會把這些寫成記憶庫筆記，寫完自動標記。" });
+  html += win("已處理", "Done", doneAll.length ? `<div class="list">${done.map(ideaCard).join("")}</div>${doneAll.length > done.length ? `<div class="inline" style="margin-top:10px"><button class="btn sm" data-act="ideas-all">顯示全部 ${doneAll.length} 則</button></div>` : ""}`
+    : `<div class="empty">還沒有處理過的想法。</div>`, { side: String(doneAll.length) });
+  return html;
+}
+
+/* ================= capture window ================= */
+function capDialog() { return document.getElementById("capture"); }
+function openCapture() {
+  const d = capDialog(); if (!d || $("#app").hidden) return;
+  if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute("open", ""); } }
+  const t = $("#cap-text");
+  try { if (!t.value) t.value = localStorage.getItem("sl-cap-draft") || ""; } catch (e) {}
+  setTimeout(() => t.focus(), 30);
+  if (location.hash === "#capture") history.replaceState(null, "", location.pathname + location.search);
+}
+function closeCapture() { const d = capDialog(); if (d && d.open) d.close(); }
+function saveCapture(prefix, form) {
+  const t = document.getElementById(prefix + "-text");
+  const body = (t.value || "").trim();
+  if (!body) { toast("還差一步", "先寫下想法內容。", "bad"); t.focus(); return false; }
+  if (store.ideasReady === false) { toast("無法儲存", "資料庫還沒有想法收件匣：請先在 Supabase 執行 2026-11-26-ideas.sql。", "bad"); return false; }
+  const a = form.querySelector(`input[name="${prefix}-area"]:checked`);
+  const id = "i" + uid().slice(1);
+  putIdea(id, { body, area: (a && a.value) || null, status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: nowIso(), logDate: todayKey(), processedAt: null });
+  form.reset();
+  if (prefix === "cap") { try { localStorage.removeItem("sl-cap-draft"); } catch (e) {} }
+  toast("已記下", "晚間覆盤時到「想法」分頁整理。");
+  return true;
+}
+document.addEventListener("input", e => {
+  if (e.target && e.target.id === "cap-text") { try { localStorage.setItem("sl-cap-draft", e.target.value); } catch (er) {} }
+});
+document.addEventListener("keydown", e => {
+  const a = document.activeElement, inField = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+  if ((e.key === "Enter") && (e.ctrlKey || e.metaKey) && a && (a.id === "cap-text" || a.id === "qc-text")) {
+    e.preventDefault(); a.form.requestSubmit(); return;
+  }
+  if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ((e.key === "i" || e.key === "I") && !(capDialog() && capDialog().open)) { e.preventDefault(); openCapture(); }
+});
+
 /* ================= RULES ================= */
 function viewRules() {
   const cfg = C(), caps = cfg.caps || {};
   const capLine = [1, 2, 3, 4, 5, 6, 0].map(d => `週${DOW[d]} ${caps[String(d)] ?? 2} 件`).join("、");
   const sp = (cfg.sleepPlan || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1)).map(p => `${md(p.from)} 起：${p.bed} 前上床、${p.wake} 前起床`).join("；");
   const rules = [
-    ["單一入口", "所有待辦以 Solo Leveling 的任務庫為準。通勤時可以先記在 Notion，但當天晚間覆盤要把待辦開進任務庫，並在 Notion 標記已搬移。Notion 只留想法和筆記。"],
+    ["單一入口", "所有待辦以 Solo Leveling 的任務庫為準。想到的事先記進想法收件匣；如果記在 Notion，當天晚間覆盤要開進任務庫，並在 Notion 標記已搬移。Notion 只留筆記和資料。"],
+    ["想法收件匣", "隨時按「記下想法」（手機在右下角的＋，桌機在左欄，或按鍵盤 I）。不用分類、不用寫完整。晚間覆盤時到「想法」分頁整理：轉成行動項目、交給 Claude 寫成記憶庫筆記，或封存。"],
     ["每件任務都有下一步", "主線任務一定要寫「下一步」和預估時間（25、50 或 90 分鐘）。超過 90 分鐘的事，先拆成第一個小步驟。"],
     ["每日主線上限", `${capLine}。每日任務不算在上限內。超過上限時面板會用紅字提醒。`],
     ["先計時再動手", "按「開始計時」再開始做。到了預估時間，卡片會變紅，提醒你用超時協議處理。計時紀錄會留著，之後可以分析預估準不準。"],
@@ -906,6 +1042,48 @@ const ACT = {
   "interest-done"(el) { const k = el.dataset.key, q = getQuarter(k); putQuarter(k, Object.assign({}, q, { done: !q.done })); if (!q.done) toast("新興趣", "+80 XP"); },
   "f-area"(el) { UI.fArea = el.dataset.v; },
   "f-status"(el) { UI.fStatus = el.dataset.v; },
+  "capture-open"() { openCapture(); },
+  "capture-close"() { closeCapture(); },
+  "ideas-all"() { UI.ideasAll = !UI.ideasAll; },
+  "idea-task"(el) {
+    const id = el.dataset.id, i = S.ideas[id]; if (!i) return;
+    const title = val("it-title-" + id);
+    if (!title) { toast("還差一步", "任務名稱不能空白。", "bad"); return; }
+    const tid = uid(), tk = todayKey(), where = val("it-where-" + id) || "backlog";
+    saveTask(tid, { title, next: val("it-next-" + id), area: val("it-area-" + id) || "life", estMin: +val("it-est-" + id) || 25, due: null,
+      status: where, plannedDate: null, source: "想法收件匣", tags: [], deferCount: 0, flag: null, note: i.body, accumMin: 0, startedAt: null, createdDate: tk },
+      { kind: "create", detail: "來自想法收件匣" });
+    putIdea(id, Object.assign({}, i, { status: i.status === "noted" ? "noted" : "action", taskIds: [...(i.taskIds || []), tid], processedAt: nowIso() }));
+    closePanel(); toast("已建立行動項目", `「${title}」放在${where === "week" ? "本週清單" : "任務庫"}。`);
+  },
+  "idea-note"(el) {
+    const id = el.dataset.id, i = S.ideas[id]; if (!i) return;
+    putIdea(id, Object.assign({}, i, { status: "note", hint: val("in-hint-" + id), processedAt: nowIso() }));
+    closePanel(); toast("已交給 Claude", "在 Claude Code 說「整理想法」就會處理。");
+  },
+  "idea-noted"(el) {
+    const id = el.dataset.id, i = S.ideas[id]; if (!i) return;
+    putIdea(id, Object.assign({}, i, { status: "noted", noteRef: val("inr-ref-" + id), processedAt: nowIso() }));
+    closePanel(); toast("通知", "已標記為寫進記憶庫。");
+  },
+  "idea-archive"(el) { const id = el.dataset.id, i = S.ideas[id]; if (i) putIdea(id, Object.assign({}, i, { status: "archived", processedAt: nowIso() })); },
+  "idea-back"(el) { const id = el.dataset.id, i = S.ideas[id]; if (i) putIdea(id, Object.assign({}, i, { status: "inbox", processedAt: null })); closePanel(); },
+  "idea-edit-save"(el) {
+    const id = el.dataset.id, i = S.ideas[id]; if (!i) return;
+    const body = val("ie-body-" + id);
+    if (!body) { toast("還差一步", "想法內容不能空白。", "bad"); return; }
+    putIdea(id, Object.assign({}, i, { body, area: val("ie-area-" + id) || null }));
+    closePanel(); toast("通知", "已儲存。");
+  },
+  "idea-del"(el) { delIdea(el.dataset.id); closePanel(); toast("通知", "已刪除這則想法。"); },
+  "idea-copy"() {
+    const text = ideasForClaude(ideasList().filter(i => i.status === "note").sort((a, b) => (a.capturedAt || "").localeCompare(b.capturedAt || "")));
+    UI.copyText = "";
+    const fallback = () => { UI.copyText = text; render(true); const t = $("#copy-fallback"); if (t) { t.focus(); t.select(); } };
+    try {
+      navigator.clipboard.writeText(text).then(() => toast("已複製", "貼到 Claude 對話裡就能請它寫成筆記。"), fallback);
+    } catch (e) { fallback(); }
+  },
   reload() { load(true); },
   update() { location.reload(); },
   export() {
@@ -955,6 +1133,8 @@ document.addEventListener("submit", async e => {
   e.preventDefault();
   if (e.target.id === "loginForm") return doLogin();
   if (e.target.id === "reviewForm") return saveReview(e.target);
+  if (e.target.id === "captureForm") { if (saveCapture("cap", e.target)) { closeCapture(); render(true); } return; }
+  if (e.target.id === "quickForm") { if (saveCapture("qc", e.target)) render(true); return; }
   if (e.target.id !== "addForm") return;
   const title = val("na-title");
   if (!title) { toast("還差一步", "請先填任務名稱。", "bad"); return; }
@@ -965,7 +1145,10 @@ document.addEventListener("submit", async e => {
   e.target.reset();
   render(true);
 });
-window.addEventListener("hashchange", () => { if (/^#(today|week|month|backlog|rules)$/.test(location.hash)) { UI.tab = location.hash.slice(1); render(true); } });
+window.addEventListener("hashchange", () => {
+  if (location.hash === "#capture") { openCapture(); return; }
+  if (/^#(today|week|month|backlog|ideas|rules)$/.test(location.hash)) { UI.tab = location.hash.slice(1); render(true); }
+});
 
 /* ================= auth & loading ================= */
 function bootFx() {
@@ -998,6 +1181,7 @@ async function load(force) {
     const first = !loaded;
     loaded = true; loadError = null; lastLoad = Date.now();
     if (first) bootFx();
+    if (first && location.hash === "#capture") setTimeout(openCapture, 60);
   } catch (e) {
     if (isAuthError(e)) { showLogin(); return; }
     loadError = (e && e.message) || "未知錯誤";

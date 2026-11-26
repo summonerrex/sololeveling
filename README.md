@@ -45,6 +45,7 @@ Rex 的每日、每週、每月任務面板：每日任務、主線任務上限�
 | 日期 | 檔案 | 內容 |
 | --- | --- | --- |
 | 2026-10-13 | `migrations/2026-10-13-day-review.sql` | 每日覆盤欄位 |
+| 2026-11-26 | `migrations/2026-11-26-ideas.sql` | 想法收件匣（ideas 表），晚間覆盤說明加上整理想法 |
 
 ## 分析範例（在 Supabase SQL Editor 執行）
 
@@ -119,3 +120,28 @@ from day_meta
 where summary is not null or reflection is not null
 order by log_date;
 ```
+
+## 想法收件匣與 Claude Code
+
+隨時記下的想法存在 `ideas` 表，晚間覆盤時在「想法」分頁整理成三種去處：
+
+- **轉成行動項目**：建立任務放進任務庫或本週清單，想法原文存在任務備註
+- **交給 Claude 寫筆記**：狀態變成「等 Claude 寫成筆記」，可以留一句筆記方向
+- **封存**：不需要後續處理
+
+`ideas.status`：`inbox` 未整理、`note` 等 Claude 寫成筆記、`noted` 已寫進記憶庫（`note_ref` 記錄位置）、`action` 已轉成行動項目（`task_ids` 記錄任務）、`archived` 封存。
+
+### 讓 Claude Code 處理「等 Claude 寫成筆記」的想法
+
+`tools/ideas.mjs` 是給 Claude Code 在你電腦上用的工具（需要 Node.js 18 以上，不用安裝套件）。
+
+1. 下載工具（只要做一次）
+   - macOS／Linux：`mkdir -p ~/.solo-leveling && curl -fsSL https://raw.githubusercontent.com/summonerrex/sololeveling/main/tools/ideas.mjs -o ~/.solo-leveling/ideas.mjs`
+   - Windows PowerShell：`New-Item -ItemType Directory -Force $HOME\.solo-leveling; Invoke-WebRequest https://raw.githubusercontent.com/summonerrex/sololeveling/main/tools/ideas.mjs -OutFile $HOME\.solo-leveling\ideas.mjs`
+2. 自己在終端機登入一次：`node ~/.solo-leveling/ideas.mjs login`（密碼不會存檔，只存登入憑證；不要讓 Claude 代為輸入密碼）
+3. 在 Claude Code 說「整理想法」。Claude 會：
+   - 用 `node ~/.solo-leveling/ideas.mjs list` 讀出等處理的想法
+   - 照記憶庫既有的格式寫成筆記
+   - 用 `noted <id> --ref "<筆記位置>"` 標記完成
+
+其他指令：`list --status inbox`（未整理）、`task <id> --title ... --next ... --area ... --est 25|50|90 [--week]`（轉成行動項目）、`archive <id>`、`logout`。執行 `node ideas.mjs help` 看完整說明。

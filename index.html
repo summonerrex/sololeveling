@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=2026-10-16.1">
+<link rel="stylesheet" href="styles.css?v=2026-11-26.1">
 <style>:root{padding-top:env(safe-area-inset-top,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
 </head>
 <body>
@@ -62,8 +62,10 @@
       <button role="tab" data-act="tab" data-v="week" id="tab-week"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19V11M9.5 19V6M14.5 19v-9M19.5 19V8"/></svg><span>本週</span></button>
       <button role="tab" data-act="tab" data-v="month" id="tab-month"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9.3 10v10M14.7 10v10M8 3v4M16 3v4"/></svg><span>本月</span></button>
       <button role="tab" data-act="tab" data-v="backlog" id="tab-backlog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 16.5l8 4 8-4"/></svg><span>任務庫</span></button>
+      <button role="tab" data-act="tab" data-v="ideas" id="tab-ideas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2c.9 4.4 3.1 6.6 7.5 7.5-4.4.9-6.6 3.1-7.5 7.5-.9-4.4-3.1-6.6-7.5-7.5 4.4-.9 6.6-3.1 7.5-7.5z"/><path d="M19 17.5v4M17 19.5h4"/></svg><span>想法</span><b class="badge num" id="ideaBadge" hidden>0</b></button>
       <button role="tab" data-act="tab" data-v="rules" id="tab-rules"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v6c0 4.4-3.1 7.6-7.5 9-4.4-1.4-7.5-4.6-7.5-9V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.6"/></svg><span>規則</span></button>
     </nav>
+    <button class="fab" id="fab" data-act="capture-open" aria-label="記下想法" title="記下想法（I）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>記下想法</span><kbd>I</kbd></button>
     <section class="railweek" id="railWeek" aria-label="本週每日任務完成情況"></section>
   </aside>
 
@@ -72,9 +74,23 @@
     <main id="view"></main>
   </div>
 </div>
+<dialog class="capture" id="capture" aria-labelledby="cap-title">
+  <form id="captureForm" class="list" method="dialog" autocomplete="off">
+    <div class="cap-h"><h2 id="cap-title">記下想法</h2><button type="button" class="btn ghost sm" data-act="capture-close" aria-label="關閉">關閉</button></div>
+    <textarea id="cap-text" rows="5" placeholder="想到什麼就寫，不用分類、不用寫完整，晚點再整理" aria-label="想法內容"></textarea>
+    <div class="fld"><span>領域（選填）</span><div class="chips" role="radiogroup" aria-label="領域">
+      <label class="chipbox"><input type="radio" name="cap-area" value="" checked><span>不分類</span></label>
+      <label class="chipbox"><input type="radio" name="cap-area" value="career"><span>職涯</span></label>
+      <label class="chipbox"><input type="radio" name="cap-area" value="invest"><span>投資</span></label>
+      <label class="chipbox"><input type="radio" name="cap-area" value="life"><span>生活</span></label>
+      <label class="chipbox"><input type="radio" name="cap-area" value="body"><span>身體</span></label>
+    </div></div>
+    <div class="cap-f"><span class="hint">沒送出的內容會先暫存在這台裝置。Ctrl＋Enter 也能送出。</span><button class="btn pri" type="submit">記下</button></div>
+  </form>
+</dialog>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script src="vendor/supabase.js"></script>
-<script type="module" src="js/app.js?v=2026-10-16.1"></script>
+<script type="module" src="js/app.js?v=2026-11-26.1"></script>
 </body>
 </html>

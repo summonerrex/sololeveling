@@ -1,7 +1,7 @@
 // 資料存取層：網站畫面只透過這個檔案讀寫資料。
 // 要換資料庫（例如改用別的服務），只需要改這個檔案。
-import { SUPABASE_URL, SUPABASE_KEY } from "./config.js?v=2026-10-16.1";
-import { demoState } from "./demo-data.js?v=2026-10-16.1";
+import { SUPABASE_URL, SUPABASE_KEY } from "./config.js?v=2026-11-26.1";
+import { demoState } from "./demo-data.js?v=2026-11-26.1";
 
 // 同一筆資料的寫入依序執行，避免後送出的寫入先到。
 const chains = new Map();
@@ -30,14 +30,14 @@ export function isAuthError(err) {
 
 /* ---------------- 展示模式：只在記憶體裡，不儲存 ---------------- */
 class DemoStore {
-  constructor() { this.mode = "demo"; this.reviewReady = true; }
+  constructor() { this.mode = "demo"; this.reviewReady = true; this.ideasReady = true; }
   async session() { return { user: { id: "demo" } }; }
   async signIn() { return this.session(); }
   async signOut() {}
   async loadAll() { return demoState(); }
   async putTask() {} async addEvent() {} async putQuest() {} async putMeta() {}
   async putGoal() {} async delGoal() {} async putCounter() {} async addCounterEvent() {}
-  async putReview() {} async putQuarter() {} async putConfig() {}
+  async putReview() {} async putQuarter() {} async putConfig() {} async putIdea() {} async delIdea() {}
 }
 
 /* ---------------- Supabase ---------------- */
@@ -76,13 +76,20 @@ class SupabaseStore {
 
   async loadAll() {
     const names = ["settings", "tasks", "task_events", "daily_quests", "day_meta", "goals", "counters", "reviews", "quarters"];
-    const [settings, tasks, events, dq, meta, goals, counters, reviews, quarters, probe] = await Promise.all([
+    const [settings, tasks, events, dq, meta, goals, counters, reviews, quarters, probe, ideasRes] = await Promise.all([
       ...names.map(n => this.all(n)),
       // 確認「每日覆盤」欄位是否已建立（supabase/migrations/2026-10-13-day-review.sql）
-      this.sb.from("day_meta").select("summary,reflection,blockers,satisfaction").limit(1)
+      this.sb.from("day_meta").select("summary,reflection,blockers,satisfaction").limit(1),
+      // 想法收件匣（supabase/migrations/2026-11-26-ideas.sql）：表還沒建立時，其他功能照常運作
+      this.all("ideas").then(rows => ({ rows }), error => ({ error }))
     ]);
     this.reviewReady = !probe.error;
-    const S = { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {} };
+    this.ideasReady = !ideasRes.error;
+    const S = { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {}, ideas: {} };
+    for (const r of (ideasRes.rows || [])) S.ideas[r.id] = {
+      body: r.body, area: r.area || null, status: r.status, hint: r.hint || "", taskIds: r.task_ids || [],
+      noteRef: r.note_ref || "", capturedAt: r.captured_at, logDate: r.log_date, processedAt: r.processed_at
+    };
     if (settings[0]) S.config = settings[0].config;
     for (const r of tasks) S.tasks[r.id] = {
       title: r.title, area: r.area, status: r.status, next: r.next_step || "", estMin: r.est_min, due: r.due,
@@ -156,6 +163,16 @@ class SupabaseStore {
   putQuarter(key, q) {
     return serial(`q:${key}`, async () => check(await this.sb.from("quarters")
       .upsert({ user_id: this.uid, quarter_key: key, interest: q.interest || null, done: !!q.done }, { onConflict: "user_id,quarter_key" })));
+  }
+  putIdea(id, i) {
+    const row = {
+      user_id: this.uid, id, body: i.body, area: i.area || null, status: i.status || "inbox", hint: i.hint || null,
+      task_ids: i.taskIds || [], note_ref: i.noteRef || null, captured_at: i.capturedAt, log_date: i.logDate, processed_at: i.processedAt || null
+    };
+    return serial(`idea:${id}`, async () => check(await this.sb.from("ideas").upsert(row, { onConflict: "user_id,id" })));
+  }
+  delIdea(id) {
+    return serial(`idea:${id}`, async () => check(await this.sb.from("ideas").delete().eq("user_id", this.uid).eq("id", id)));
   }
   putConfig(cfg) {
     return serial("settings", async () => check(await this.sb.from("settings").upsert({ user_id: this.uid, config: cfg }, { onConflict: "user_id" })));

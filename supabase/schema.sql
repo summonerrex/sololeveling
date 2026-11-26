@@ -189,3 +189,31 @@ begin
   end loop;
 end $$;
 grant usage, select on all sequences in schema public to authenticated;
+
+-- ---------- 2026-11-26 新增：想法收件匣（說明見 supabase/migrations/2026-11-26-ideas.sql） ----------
+create table if not exists public.ideas (
+  user_id      uuid not null references auth.users on delete cascade,
+  id           text not null,
+  body         text not null,
+  area         text check (area in ('career','invest','life','body')),
+  status       text not null default 'inbox' check (status in ('inbox','note','noted','action','archived')),
+  hint         text,                         -- 交給 Claude 時留下的筆記方向
+  task_ids     text[] not null default '{}', -- 轉成的行動項目（tasks.id）
+  note_ref     text,                         -- 寫進記憶庫後的位置（檔名或標題）
+  captured_at  timestamptz not null default now(),
+  log_date     date not null,                -- 邏輯日期：凌晨 4 點前記的算前一天
+  processed_at timestamptz,
+  updated_at   timestamptz not null default now(),
+  primary key (user_id, id)
+);
+create index if not exists ideas_user_status_idx on public.ideas (user_id, status, captured_at desc);
+
+drop trigger if exists ideas_updated_at on public.ideas;
+create trigger ideas_updated_at before update on public.ideas for each row execute function public.set_updated_at();
+
+alter table public.ideas enable row level security;
+revoke all on public.ideas from anon;
+grant select, insert, update, delete on public.ideas to authenticated;
+drop policy if exists own_rows on public.ideas;
+create policy own_rows on public.ideas for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
