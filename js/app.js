@@ -1,7 +1,8 @@
-// Solo Leveling（Rex 的任務面板）：畫面與操作邏輯。資料讀寫都交給 store.js。
-import { createStore, isAuthError } from "./store.js?v=2026-11-26.1";
-import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-11-26.1";
-import { VERSION } from "./version.js?v=2026-11-26.1";
+// Solo Leveling：畫面與操作邏輯。資料讀寫都交給 store.js。
+// 隱私：這個檔案在公開 repo，只放通用文字。個人化內容（每日任務、週回顧步驟等）放在資料庫的 settings.config。
+import { createStore, isAuthError } from "./store.js?v=2026-11-26.2";
+import { DEFAULT_CONFIG } from "./demo-data.js?v=2026-11-26.2";
+import { VERSION } from "./version.js?v=2026-11-26.2";
 
 /* ================= constants ================= */
 const AREAS = {
@@ -28,20 +29,22 @@ const BLOCKERS = [
   ["other", "其他（寫在感想裡）"]
 ];
 const BLOCKER_LABEL = Object.fromEntries(BLOCKERS);
-const REVIEW_STEPS = [
-  "清空想法收件匣，並把這週冒出來的待辦（包括 Notion 裡還沒搬過來的）全部加進任務庫",
+// 預設的週回顧步驟；settings.config.reviewSteps 有設定時以設定為準
+const DEFAULT_REVIEW_STEPS = [
+  "清空想法收件匣，並把這週冒出來的待辦（包括記在其他地方、還沒搬過來的）全部加進任務庫",
   "處理「待處理」和「停滯」的任務：拆小、排日期，或放棄",
   "每個領域選本週目標：主攻領域各 1–2 個，維持領域各最多 1 個",
   "把本週清單排進每一天，不超過每日上限",
-  "確認本週固定行程：健身、皮拉提斯、家人出遊、遊戲時間"
+  "確認本週固定行程"
 ];
+const reviewSteps = () => { const s = C().reviewSteps; return Array.isArray(s) && s.length ? s : DEFAULT_REVIEW_STEPS; };
 
 /* ================= state ================= */
 const store = createStore();
 let S = emptyState();
 let loaded = false, loadError = null, lastLoad = 0, pending = 0, lastLevel = null;
 const UI = { tab: "today", panel: null, weekOffset: 0, monthOffset: 0, fArea: "all", fStatus: "open", justCleared: false, overNotified: new Set() };
-try { const t = localStorage.getItem("rex-tab"); if (t) UI.tab = t; } catch (e) {}
+try { const t = localStorage.getItem("sl-tab"); if (t) UI.tab = t; } catch (e) {}
 if (/^#(today|week|month|backlog|ideas|rules)$/.test(location.hash)) UI.tab = location.hash.slice(1);
 
 function emptyState() { return { config: null, tasks: {}, events: [], days: {}, meta: {}, goals: {}, counters: {}, reviews: {}, quarters: {}, ideas: {} }; }
@@ -415,7 +418,7 @@ function reviewWindow(dk) {
     ${can ? "" : `<div class="banner" style="margin-bottom:10px">資料庫還沒有覆盤用的欄位。請先在 Supabase SQL Editor 執行 2026-10-13-day-review.sql，再重新整理這個頁面。</div>`}
     <div class="sysline num">系統紀錄：${esc(daySystemLine(dk))}</div>
     <form id="reviewForm" class="list" autocomplete="off" data-date="${dk}">
-      <label class="fld" for="rv-summary">一句話總結今天的執行狀況<input type="text" id="rv-summary" maxlength="140" value="${esc(m.summary)}" placeholder="例如：主線做完一步，晚上被會議資料拖住，投資流程沒做"${dis}></label>
+      <label class="fld" for="rv-summary">一句話總結今天的執行狀況<input type="text" id="rv-summary" maxlength="140" value="${esc(m.summary)}" placeholder="例如：主線做完一步，下午被臨時的事打斷，運動沒做"${dis}></label>
       <div class="fld"><span>今天滿意度（1 很差 – 5 很好，選填）</span><div class="chips">${sat}</div></div>
       <div class="fld"><span>卡住的原因（可複選，選填）</span><div class="chips">${chips}</div></div>
       <label class="fld" for="rv-reflect">感想與觀察（選填）<textarea id="rv-reflect" rows="3" placeholder="什麼有效、什麼沒效、明天想調整什麼"${dis}>${esc(m.reflection)}</textarea></label>
@@ -662,7 +665,7 @@ function viewWeek() {
   html += win("任務排程", "Schedule", `<div class="days7">${strip}</div><div class="sec-label">本週清單：還沒排日期</div>${poolHtml}`, { sub: "每天的數字是「已排主線 / 上限」。紅色代表超過上限。" });
 
   const rv = getReview(key);
-  const stepsHtml = REVIEW_STEPS.map((s, i) => `<div class="goal${rv.steps && rv.steps[i] ? " done" : ""}">
+  const stepsHtml = reviewSteps().map((s, i) => `<div class="goal${rv.steps && rv.steps[i] ? " done" : ""}">
       <button class="box" data-act="review-step" data-key="${key}" data-i="${i}" aria-pressed="${!!(rv.steps && rv.steps[i])}" aria-label="切換步驟">${rv.steps && rv.steps[i] ? "✓" : ""}</button>
       <span class="txt"><span class="num" style="color:var(--glow);margin-right:6px">${i + 1}</span>${esc(s)}</span><span></span></div>`).join("");
   html += win("週回顧", "Weekly Review", `${weekReviewDigest(days)}<div class="sec-label">回顧步驟</div>${stepsHtml}
@@ -717,8 +720,8 @@ function viewBacklog() {
   const flagged = all.filter(t => t.flag && isOpen(t));
   const openAll = all.filter(isOpen).length, weekAll = all.filter(t => t.status === "week").length;
   let html = pageHead("任務庫", `${nb(openAll)} 件進行中，其中 ${nb(weekAll)} 件在本週清單。所有待辦都記在這裡。`) + win("新增任務", "New Quest", `<form id="addForm" class="list" autocomplete="off">
-      <label class="fld" for="na-title">任務名稱<input type="text" id="na-title" placeholder="例如：完成交易系統每日流程草稿" required></label>
-      <label class="fld" for="na-next">下一步（具體到可以直接開始的動作）<input type="text" id="na-next" placeholder="例如：列出每天要看的 5 個資訊來源"></label>
+      <label class="fld" for="na-title">任務名稱<input type="text" id="na-title" placeholder="例如：寫好提案第一版" required></label>
+      <label class="fld" for="na-next">下一步（具體到可以直接開始的動作）<input type="text" id="na-next" placeholder="例如：打開文件，先寫下三個重點"></label>
       <div class="grid2">
         <label class="fld" for="na-area">領域<select id="na-area">${AREA_ORDER.map(a => `<option value="${a}">${AREAS[a].name}</option>`).join("")}</select></label>
         <label class="fld" for="na-est">下一步預估時間${estSelect("na-est", 25)}</label>
@@ -798,7 +801,7 @@ function ideaPanel(i, kind) {
       <span class="hint">想法原文會存在任務的備註裡。一則想法可以開好幾個行動項目。</span>
       <div class="inline"><button class="btn pri sm" data-act="idea-task" data-id="${id}">建立行動項目</button>${cancel}</div></div></div>`;
   if (kind === "i-note") return `<div class="panel-in"><div class="opt"><h4>交給 Claude 寫成記憶庫筆記</h4>
-      <label class="fld" for="in-hint-${id}">筆記方向（選填）<textarea id="in-hint-${id}" rows="2" placeholder="例如：整理成一則知識點，附一個遊戲營運的例子">${esc(i.hint || "")}</textarea></label>
+      <label class="fld" for="in-hint-${id}">筆記方向（選填）<textarea id="in-hint-${id}" rows="2" placeholder="例如：整理成一則知識點，附一個實際的例子">${esc(i.hint || "")}</textarea></label>
       <span class="hint">之後在 Claude Code 說「整理想法」，Claude 會把這類想法寫成筆記放進記憶庫，寫完自動標記。</span>
       <div class="inline"><button class="btn pri sm" data-act="idea-note" data-id="${id}">交給 Claude</button>${cancel}</div></div></div>`;
   if (kind === "i-noted") return `<div class="panel-in"><div class="opt"><h4>標記已寫進記憶庫</h4>
@@ -881,7 +884,7 @@ function viewRules() {
   const capLine = [1, 2, 3, 4, 5, 6, 0].map(d => `週${DOW[d]} ${caps[String(d)] ?? 2} 件`).join("、");
   const sp = (cfg.sleepPlan || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1)).map(p => `${md(p.from)} 起：${p.bed} 前上床、${p.wake} 前起床`).join("；");
   const rules = [
-    ["單一入口", "所有待辦以 Solo Leveling 的任務庫為準。想到的事先記進想法收件匣；如果記在 Notion，當天晚間覆盤要開進任務庫，並在 Notion 標記已搬移。Notion 只留筆記和資料。"],
+    ["單一入口", "所有待辦以 Solo Leveling 的任務庫為準。想到的事先記進想法收件匣；如果先記在其他筆記工具，當天晚間覆盤要開進任務庫，並在原處標記已搬移。其他工具只留筆記和資料。"],
     ["想法收件匣", "隨時按「記下想法」（手機在右下角的＋，桌機在左欄，或按鍵盤 I）。不用分類、不用寫完整。晚間覆盤時到「想法」分頁整理：轉成行動項目、交給 Claude 寫成記憶庫筆記，或封存。"],
     ["每件任務都有下一步", "主線任務一定要寫「下一步」和預估時間（25、50 或 90 分鐘）。超過 90 分鐘的事，先拆成第一個小步驟。"],
     ["每日主線上限", `${capLine}。每日任務不算在上限內。超過上限時面板會用紅字提醒。`],
@@ -889,14 +892,24 @@ function viewRules() {
     ["超時協議", `做到預估時間還沒完成，按「超時／卡住」，四選一：延長 ${EXTEND_MIN} 分鐘（每件每天一次）、拆分、改期（一定要填日期）、放棄（寫一句原因）。不能直接放著。`],
     ["沒做完的不會消失", "排了日期卻沒完成的任務，隔天會出現在「待處理」，要選移到今天、改期、放回任務庫或放棄。"],
     ["停滯規則", `在本週清單 ${STALE_DAYS} 天沒動的任務、或已改期 3 次的任務，會出現在「停滯警告」。週回顧時一定要處理。`],
-    ["晚間覆盤", "每天睡前 5–10 分鐘：勾完成、把 Notion 記的待辦開進任務庫、處理沒做完的、排明天的主線，最後在「今日 › 每日覆盤」寫一句總結。儲存覆盤會自動勾選這一項每日任務。"],
-    ["週回顧", "每週日 30 分鐘，照「本週 › 週回顧」的 5 個步驟走，並切到下一週把任務排進每一天。"],
+    ["晚間覆盤", "每天睡前 5–10 分鐘：勾完成、把記在其他地方的待辦開進任務庫、處理沒做完的、排明天的主線，最後在「今日 › 每日覆盤」寫一句總結。儲存覆盤會自動勾選這一項每日任務。"],
+    ["週回顧", `每週日 30 分鐘，照「本週 › 週回顧」的 ${reviewSteps().length} 個步驟走，並切到下一週把任務排進每一天。`],
     ["一天的分界", `凌晨 ${DAY_ROLLOVER_HOURS} 點前做的事算前一天，所以半夜覆盤不會被算到隔天。`],
     ["作息調整", sp || "依設定逐步調整就寢與起床時間。"]
   ];
   let html = pageHead("規則", "這套系統怎麼運作，經驗值和等級怎麼算。") + win("系統規則", "Rules", rules.map((r, i) => `<div class="rule-item"><h3>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>`).join(""));
+  // 每日任務的經驗值依設定產生，不把個人的項目寫死在程式裡
+  const dqGroups = new Map();
+  for (const q of cfg.dailies || []) {
+    const k = q.type === "sets" ? `s|${q.xp}|${q.min || 1}|${q.sets || 3}` : `c|${q.xp}`;
+    if (!dqGroups.has(k)) dqGroups.set(k, { q, labels: [] });
+    dqGroups.get(k).labels.push(q.label);
+  }
+  const dqRows = [...dqGroups.values()].map(({ q, labels }) => q.type === "sets"
+    ? [`${labels.join("、")}（每項做滿 ${q.min || 1} 組）`, `各 +${q.xp}，做滿 ${q.sets || 3} 組再 +5`]
+    : [labels.join("、"), `各 +${q.xp}`]);
   const xpRows = [
-    ["每日任務（閱讀、覆盤）", "各 +15"], ["徒手訓練（每項做滿 2 組）", "各 +10，做滿 3 組再 +5"], ["作息（準時上床、準時起床）", "各 +10"],
+    ...dqRows,
     ["核心每日任務全部完成", "+20，連續天數 +1"], ["主線步驟（25／50／90 分鐘）", "+20／+40／+70"], ["拆分時已完成的部分", "該步驟的一半"],
     ["整個任務完成", "再 +30"], ["週目標完成", "+50"], ["每週指標達成", "各 +30"], ["完成週回顧", "+40"], ["月目標完成", "+100"], ["每月指標達成", "各 +50"], ["本季新興趣接觸", "+80"]
   ];
@@ -916,7 +929,7 @@ function closePanel() { UI.panel = null; }
 function afterQuest(before) { const after = dayScore(getDay(todayKey()), C()).coreAll; if (!before && after) { UI.justCleared = true; notice("quest", "每日任務完成", "核心任務全部達成", "+20 XP，連續天數 +1"); } }
 
 const ACT = {
-  tab(el) { UI.tab = el.dataset.v; UI.panel = null; try { localStorage.setItem("rex-tab", UI.tab); } catch (e) {} window.scrollTo({ top: 0 }); },
+  tab(el) { UI.tab = el.dataset.v; UI.panel = null; try { localStorage.setItem("sl-tab", UI.tab); } catch (e) {} window.scrollTo({ top: 0 }); },
   "dq-toggle"(el) {
     const tk = todayKey(), id = el.dataset.id, cfg = C();
     const before = dayScore(getDay(tk), cfg).coreAll;

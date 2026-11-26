@@ -44,7 +44,7 @@ update public.settings
 set config = jsonb_set(config, '{dailies}', (
   select jsonb_agg(
            case when d->>'id' = 'review'
-                then jsonb_set(d, '{detail}', to_jsonb('勾完成、整理想法收件匣和 Notion 記的待辦、處理沒做完的、排明天（5–10 分鐘）'::text))
+                then jsonb_set(d, '{detail}', to_jsonb('勾完成、整理想法收件匣、處理沒做完的、排明天（5–10 分鐘）'::text))
                 else d end
            order by ord)
   from jsonb_array_elements(config->'dailies') with ordinality as t(d, ord)

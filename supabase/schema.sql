@@ -1,4 +1,4 @@
--- Rex 任務面板：Supabase 資料庫結構
+-- Solo Leveling：Supabase 資料庫結構
 -- 用法：在 Supabase 專案的 SQL Editor 貼上整份檔案，按 Run。重複執行是安全的（已存在的表不會被覆蓋）。
 --
 -- 設計原則

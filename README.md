@@ -1,6 +1,6 @@
 # Solo Leveling
 
-Rex 的每日、每週、每月任務面板：每日任務、主線任務上限、計時與超時處理、週回顧、經驗值與等級。
+個人的每日、每週、每月任務面板：每日任務、主線任務上限、計時與超時處理、週回顧、經驗值與等級。
 網站是純靜態檔案（放在 GitHub Pages），資料存在 Supabase（PostgreSQL），用 email＋密碼登入。
 
 ## 資料夾結構
@@ -18,6 +18,8 @@ Rex 的每日、每週、每月任務面板：每日任務、主線任務上限�
 ## 隱私規則
 
 - 這個 repo 是公開的。**任何個人資料都不放進 repo**：資料搬移 SQL、匯出的 JSON 都放在 `private/`（已列在 `.gitignore`）。
+- 程式碼、註解、範例資料、SQL 檔都只寫通用內容。不寫名字、行程、運動或健康狀況、家人、工作或投資的具體內容，也不寫能拼湊出這些資訊的細節。
+- 個人化的內容（每日任務、週回顧步驟、固定行程、作息目標等）存在資料庫 `settings.config`，只有登入後讀得到。只改自己資料的 SQL 放在 `private/`，不 commit。
 - `js/config.js` 只放 publishable key（開頭 `sb_publishable_`）。它本來就是給瀏覽器用的，資料能不能讀到由資料庫的權限決定：每張表都開了 Row Level Security，登入的人只讀寫得到自己的列。
 - secret key（開頭 `sb_secret_`）絕對不放在這裡或任何前端程式。
 - Supabase 的 Authentication 要關掉「允許新使用者註冊」，只保留自己的帳號。
@@ -37,6 +39,20 @@ Rex 的每日、每週、每月任務面板：每日任務、主線任務上限�
 `log_date` 是邏輯日期：凌晨 4 點前發生的事算前一天。`day_meta.bed_time` 是「這天早上之前那一晚」的上床時間。
 
 `day_meta` 的每日覆盤欄位：`summary` 一句話總結、`reflection` 感想、`blockers` 卡住的原因代碼（`long_list` 清單太長、`too_big` 事情太大沒拆、`no_slot` 沒排時段、`low_energy` 精神體力不好、`interrupted` 被打斷、`perfection` 想做到完美而拖延、`forgot` 忘記回來看、`other` 其他）、`satisfaction` 滿意度 1–5。
+
+## 個人化設定（`settings.config`）
+
+網站的預設值都是通用內容，自己的設定存在 `settings.config`（JSON）。常用欄位：
+
+| 欄位 | 內容 |
+| --- | --- |
+| `dailies` | 每日任務清單 |
+| `reviewSteps` | 週回顧步驟（文字陣列）；沒設定時用程式裡的通用步驟 |
+| `fixed` | 固定行程 |
+| `sleepPlan` | 作息目標 |
+| `weekTargets`、`monthTargets` | 每週、每月指標 |
+
+修改方式：在 Supabase SQL Editor 用 `jsonb_set` 更新自己的那一列，SQL 存在 `private/`。
 
 ## 資料庫更新紀錄
 

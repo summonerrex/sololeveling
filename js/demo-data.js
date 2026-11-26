@@ -10,12 +10,10 @@ export const DEFAULT_CONFIG = {
   resetDays: 14,
   focus: [],
   dailies: [
-    { id: "read", label: "閱讀", detail: "至少 20 分鐘", type: "check", xp: 15, area: "life", core: true },
-    { id: "pushup", label: "伏地挺身", detail: "30 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
-    { id: "crunch", label: "捲腹", detail: "20 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
-    { id: "squat", label: "深蹲", detail: "20 下 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
-    { id: "abwheel", label: "滾輪", detail: "1–2 組", type: "sets", sets: 2, min: 1, xp: 10, area: "body", core: true },
-    { id: "review", label: "晚間覆盤", detail: "勾完成、處理沒做完的、排明天（5–10 分鐘）", type: "check", xp: 15, area: "life", core: true }
+    { id: "stretch", label: "伸展", detail: "10 分鐘", type: "check", xp: 15, area: "body", core: true },
+    { id: "plank", label: "平板支撐", detail: "1 分鐘 × 2–3 組", type: "sets", sets: 3, min: 2, xp: 10, area: "body", core: true },
+    { id: "learn", label: "學習", detail: "15 分鐘", type: "check", xp: 15, area: "career", core: true },
+    { id: "review", label: "晚間覆盤", detail: "勾完成、整理想法收件匣、處理沒做完的、排明天（5–10 分鐘）", type: "check", xp: 15, area: "life", core: true }
   ],
   caps: { "0": 1, "1": 1, "2": 1, "3": 2, "4": 2, "5": 2, "6": 2 },
   dayNotes: {},
@@ -33,19 +31,19 @@ export function demoState() {
   const config = Object.assign({}, DEFAULT_CONFIG, {
     playerName: "DEMO",
     startDate: today,
-    focus: ["career", "invest"],
+    focus: ["career", "life"],
     dailies: DEFAULT_CONFIG.dailies.concat([
       { id: "sleep", label: "昨晚準時上床", detail: "", type: "check", xp: 10, area: "body", core: false },
       { id: "wake", label: "今早準時起床", detail: "", type: "check", xp: 10, area: "body", core: false }
     ]),
-    sleepPlan: [{ from: today, bed: "01:00", wake: "07:30" }],
+    sleepPlan: [{ from: today, bed: "23:30", wake: "07:00" }],
     weekTargets: [
-      { id: "gym", label: "健身", target: 2, stretch: 3, unit: "次", area: "body" },
-      { id: "game", label: "玩喜歡的遊戲 2 小時以上", target: 2, unit: "次", area: "life" }
+      { id: "walk", label: "散步 30 分鐘", target: 3, stretch: 5, unit: "次", area: "body" },
+      { id: "friends", label: "和朋友見面", target: 1, unit: "次", area: "life" }
     ],
-    monthTargets: [{ id: "seminar", label: "研討會或講座", target: 2, unit: "場", area: "career" }],
-    fixed: [{ dow: [1], time: "21:00–23:00", label: "健身（範例）", short: "健身", strip: true }],
-    longGoals: [{ area: "body", text: "範例：三年內建立固定的運動習慣" }]
+    monthTargets: [{ id: "book", label: "讀完一本書", target: 1, unit: "本", area: "career" }],
+    fixed: [{ dow: [3], time: "19:00–20:00", label: "運動課（範例）", short: "運動", strip: true }],
+    longGoals: [{ area: "body", text: "範例：建立固定的運動習慣" }]
   });
   const mk = (title, area, next, estMin, status, extra = {}) => Object.assign({
     title, area, next, estMin, status, plannedDate: null, due: null, source: "範例", tags: [], note: "", flag: null,
@@ -55,22 +53,22 @@ export function demoState() {
   return {
     config,
     tasks: {
-      d1: mk("範例：寫一頁作品規格", "career", "列出問題、資料來源和分析方法", 50, "week", { plannedDate: today }),
-      d2: mk("範例：整理每日交易流程", "invest", "寫下每天要看的 5 個資訊來源", 25, "week"),
-      d3: mk("範例：預約健康檢查", "body", "查兩家診所的時段", 25, "backlog"),
+      d1: mk("範例：寫好提案第一版", "career", "列出要回答的三個問題", 50, "week", { plannedDate: today }),
+      d2: mk("範例：整理每月預算表", "invest", "列出固定支出", 25, "week"),
+      d3: mk("範例：找一堂想上的運動課", "body", "查兩個可以的時段", 25, "backlog"),
       d4: mk("範例：一個逾期很久的舊項目", "life", "決定是否保留", 25, "backlog", { flag: "建議刪除：範例標記" })
     },
     events: [],
-    days: { [today]: { dq: { read: 1, pushup: 2 } } },
+    days: { [today]: { dq: { stretch: 1, plank: 2 } } },
     meta: {},
     goals: {},
     counters: {},
     reviews: {},
     quarters: {},
     ideas: {
-      n1: { body: "範例：交易流程可以先只看 3 個指標，其他的週末再看", area: "invest", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 3 * 3600e3).toISOString(), logDate: today, processedAt: null },
-      n2: { body: "範例：留存分析裡「組成變化」和「行為變化」要分開說明，可以整理成一則筆記", area: "career", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 26 * 3600e3).toISOString(), logDate: today, processedAt: null },
-      n3: { body: "範例：辛普森悖論在分層報表裡怎麼提醒讀者", area: "career", status: "note", hint: "寫成一則知識點，附一個例子", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 50 * 3600e3).toISOString(), logDate: today, processedAt: new Date(Date.now() - 49 * 3600e3).toISOString() }
+      n1: { body: "範例：記帳可以先只分三大類，細項月底再整理", area: "invest", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 3 * 3600e3).toISOString(), logDate: today, processedAt: null },
+      n2: { body: "範例：開會前先寫下三個想問的問題，可以整理成一則筆記", area: "career", status: "inbox", hint: "", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 26 * 3600e3).toISOString(), logDate: today, processedAt: null },
+      n3: { body: "範例：番茄鐘 25 分鐘太短，試試 50 分鐘一段", area: "life", status: "note", hint: "寫成一則知識點，附一個例子", taskIds: [], noteRef: "", capturedAt: new Date(Date.now() - 50 * 3600e3).toISOString(), logDate: today, processedAt: new Date(Date.now() - 49 * 3600e3).toISOString() }
     }
   };
 }

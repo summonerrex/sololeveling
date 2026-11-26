@@ -41,14 +41,15 @@ function parseArgs(argv) {
   }
   return out;
 }
-// 邏輯日期：台北時間，凌晨 4 點前算前一天（和網站相同）
+// 邏輯日期：電腦設定的時區（可用 SOLO_TZ 指定），凌晨 4 點前算前一天（和網站相同）
+const TZ = process.env.SOLO_TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 function logicalDate(now = Date.now()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now - 4 * 3600e3));
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now - 4 * 3600e3));
 }
 function fmtTime(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return "";
-  return new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+  return new Intl.DateTimeFormat("zh-TW", { timeZone: TZ, month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 }
 
 async function http(method, url, { token, body, prefer } = {}) {
